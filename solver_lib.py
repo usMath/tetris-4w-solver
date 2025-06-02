@@ -1,8 +1,7 @@
 ### IMPORTS ###
 
+from collections import defaultdict, deque
 import os
-import random
-import time
 
 ### UTILITY FUNCTIONS ###
 
@@ -160,15 +159,16 @@ def get_next_boards(board_hash, piece):
         y -= 1
     
     # State is (y, x, rotation)
-    queue = [(y, 1, 0)]
-    _i = 0
+    queue = deque()
+    queue.append((y, 1, 0))
     visited = set()
     
     # BFS on all possible ending locations for piece, assuming 100g
-    while _i < len(queue):
-        if queue[_i] not in visited:
-            visited.add(queue[_i])
-            (y, x, rotation) = queue[_i]
+    while len(queue) > 0:
+        current = queue.popleft()
+        if current not in visited:
+            visited.add(current)
+            (y, x, rotation) = current
             
             # test movement
             for x_move in (-1, 1):
@@ -209,8 +209,6 @@ def get_next_boards(board_hash, piece):
                                     break
                         queue.append((new_y_position, new_x_position, new_rotation))
                         break
-
-        _i += 1
     
     # Obtain board states
     boards = set()
@@ -219,7 +217,10 @@ def get_next_boards(board_hash, piece):
         for (offset_y, offset_x) in PIECES[piece][rotation]:
             new_hash += 2**(4 * (y + offset_y) + x + offset_x)
         new_board = unhash_board(new_hash)
+        
+        # Remove completed lines
         cleared_board = [_ for _ in new_board if 0 in _]
+        
         boards.add(hash_board(cleared_board))
     
     return sorted(boards)
@@ -237,7 +238,7 @@ def get_next_boards_given_queue(board_hash, queue):
 # Computes all possible previous piece placements given board and previous piece
 # Returns a list of all possible previous boards.
 # Assume 100g.
-def get_previous_boards(board_hash, piece):
+def get_previous_boards(board_hash, piece, forwards_saved_transitions = {}):
     
     # Obtain board
     board = unhash_board(board_hash)
@@ -281,7 +282,9 @@ def get_previous_boards(board_hash, piece):
     # Ensure it is possible to reach current board state from each candidate previous board state
     boards = []
     for candidate_previous_board in candidate_previous_boards:
-        if board_hash in get_next_boards(candidate_previous_board, piece):
+        if (candidate_previous_board, piece) not in forwards_saved_transitions:
+            forwards_saved_transitions[(candidate_previous_board, piece)] = get_next_boards(candidate_previous_board, piece)
+        if board_hash in forwards_saved_transitions[(candidate_previous_board, piece)]:
             boards.append(candidate_previous_board)
     
     return boards
@@ -289,10 +292,11 @@ def get_previous_boards(board_hash, piece):
 # Computes all possible board states that at the end of the given queue results in the given board
 def get_previous_boards_given_queue(board_hash, queue):
     boards = set([board_hash])
+    forwards_saved_transitions = {}
     for piece in reversed(queue):
         prev_boards = set()
         for board in boards:
-            prev_boards = prev_boards.union(set(get_previous_boards(board, piece)))
+            prev_boards = prev_boards.union(set(get_previous_boards(board, piece, forwards_saved_transitions)))
         boards = prev_boards
     return sorted(boards)
 
@@ -300,7 +304,7 @@ def get_previous_boards_given_queue(board_hash, queue):
 # Limits max height to H.
 # Reads from output file if one exists.
 # Otherwise, saves to output file because this is gonna take FOREVER.
-def generate_all_pc_queues(filename, n = 7, h = 8, override = False):
+def generate_all_pc_queues(filename, n = 8, h = 8, override = False):
     if not override and os.path.isfile(filename):
         ifil = open(filename, 'r')
         N = int(ifil.readline().strip())
@@ -312,28 +316,70 @@ def generate_all_pc_queues(filename, n = 7, h = 8, override = False):
     pcs = set()
     
     max_board = 2**(4*h) - 1  # max hash
-    queue = [(0, ""),]  # (board_hash, history)
-    saved_transitions = {}  # (board_hash, piece) -> next_board_list
+    
+    # Optimization: use BFS forwards and backwards
+    n_backwards = n//4 + 1
+    n_forwards = n - n_backwards
+    
+    # Backwards direction
+    backwards_queue = deque()
+    backwards_queue.append((0, ""))  # (board_hash, history)
+    backwards_reachable_states = defaultdict(set)  # board_hash -> queue_set
+    backwards_saved_transitions = {}  # (board_hash, piece) -> next_board_list
+    forwards_saved_transitions = {}  # (board_hash, piece) -> next_board_list
+    
     visited = set()
-    _i = 0
-    while _i < len(queue):
-        if queue[_i] not in visited:
-            visited.add(queue[_i])
-            (board_hash, history) = queue[_i]
+    while len(backwards_queue) > 0:
+        current = backwards_queue.popleft()
+        if current not in visited:
+            visited.add(current)
+            (board_hash, history) = current
+            
+            # Check each possible next piece
+            for piece in PIECES:
+                new_history = piece + history
+                if (board_hash, piece) not in backwards_saved_transitions:
+                    backwards_saved_transitions[(board_hash, piece)] = get_previous_boards(board_hash, piece, forwards_saved_transitions)
+                for previous_board in backwards_saved_transitions[(board_hash, piece)]:
+                    # Track reachable board states
+                    if previous_board != 0 and previous_board < max_board:
+                        backwards_reachable_states[previous_board].add(new_history)
+                        if len(new_history) < n_backwards:
+                            backwards_queue.append((previous_board, new_history))
+    
+    # Forwards direction
+    forwards_queue = deque()
+    forwards_queue.append((0, ""))  # (board_hash, history)
+    forwards_reachable_states = defaultdict(set)  # board_hash -> queue_set
+    
+    visited = set()
+    while len(forwards_queue) > 0:
+        current = forwards_queue.popleft()
+        if current not in visited:
+            visited.add(current)
+            (board_hash, history) = current
             
             # Check each possible next piece
             for piece in PIECES:
                 new_history = history + piece
-                if (board_hash, piece) not in saved_transitions:
-                    saved_transitions[(board_hash, piece)] = get_next_boards(board_hash, piece)
-                for next_board in saved_transitions[(board_hash, piece)]:
-                    if next_board == 0:
-                        pcs.add(new_history)  # OMG IT IS A PC
-                    # Check to see if should keep searching
-                    elif next_board < max_board and len(new_history) < n:
-                        queue.append((next_board, new_history))
-                
-        _i += 1
+                if (board_hash, piece) not in forwards_saved_transitions:
+                    forwards_saved_transitions[(board_hash, piece)] = get_next_boards(board_hash, piece)
+                for next_board in forwards_saved_transitions[(board_hash, piece)]:
+                    # Track reachable board states
+                    if next_board < max_board and next_board != 0:
+                        if next_board in backwards_reachable_states:
+                            forwards_reachable_states[next_board].add(new_history)
+                        if len(new_history) < n_forwards:
+                            forwards_queue.append((next_board, new_history))
+    
+    # Merge forwards and backwards
+    for board_hash in forwards_reachable_states:
+        if board_hash in backwards_reachable_states:
+            for first_half in forwards_reachable_states[board_hash]:
+                for second_half in backwards_reachable_states[board_hash]:
+                    pcs.add(first_half + second_half)
+    
+    pcs.add("I")  # Edge case
     
     # Save to output file
     ofil = open(filename, 'w')
