@@ -4,6 +4,7 @@ from lib.board_lib import EMPTY_BOARD_HASH
 
 from collections import defaultdict, deque
 import os
+import time
 from typing import Dict, List, Optional, Set, Tuple, TypeAlias
 
 PC_State_Transitions: TypeAlias = Dict[Tuple[BoardHash, Piece], Dict[BoardHash, PieceFinesse]]
@@ -144,6 +145,30 @@ def generate_all_pc_queues(
       output_file.write(f"{pc_queue}|{','.join(str(pc_hash) for pc_hash in pc_hashes)}|{finesse_string}\n")
   return pcs
 
+def load_pc_queues(filename: str) -> Dict[Tuple[Queue, Tuple[BoardHash]], List[PieceFinesse]]:
+  """Reads pc data from file"""
+  pcs = {}
+  with open(filename, 'r') as input_file:
+    N = int(input_file.readline().strip())
+    pcs = {}
+    # Handle I because it is edge case that is annoying
+    input_file.readline()
+    pcs[("I", ())] = [("",),]
+    for _ in range(1, N):
+      split_line = input_file.readline().strip().split("|")
+      (pc_queue, board_hashes, finesse_list) = split_line
+      board_hashes = tuple(map(int, board_hashes.split(",")))
+      finesse_list = [tuple(piece_finesse.split(",")) for piece_finesse in finesse_list.split(";")]
+      pcs[(pc_queue, board_hashes)] = finesse_list
+  return pcs
+
+def build_pc_set(pcs: Dict[Tuple[Queue, Tuple[BoardHash]], List[PieceFinesse]]) -> Set[Queue]:
+  """Returns set of all pcs"""
+  pc_set = set()
+  for (queue, _) in pcs:
+    pc_set.add(queue)
+  return pc_set
+
 def build_state_transitions(
     pcs: Dict[Tuple[Queue, Tuple[BoardHash]], List[PieceFinesse]]
   ) -> PC_State_Transitions:
@@ -243,7 +268,7 @@ def get_max_pc_states(
   for pc_state in pc_states:
     initial_tracked = None
     if track_first:
-      initial_tracked = pc_state
+      initial_tracked = set([pc_state,])
     most_pcs_at_state[pc_state] = (0, initial_tracked, None)
   
   # Loop through each index
@@ -380,6 +405,7 @@ def compute_foresight_scores(
   # For each final state and foresight queue
   for final_state in foresight_scores:
     (queue_index, board_hash, hold) = final_state
+    foresight_scores_with_hold[final_state] = {}
 
     for foresight_queue in board_lib.all_queues(foresight):
       combined_queue = hold + foresight_queue
@@ -387,7 +413,7 @@ def compute_foresight_scores(
       # Compute best score with hold
       best_score = max_foresight_score
       for queue_order in board_lib.get_queue_orders(combined_queue):
-        best_score = min(best_score, foresight_scores[final_state][queue_order])
+        best_score = min(best_score, foresight_scores[final_state][queue_order[:-1]])
       # Update score
       foresight_scores_with_hold[final_state][foresight_queue] = best_score
 
@@ -421,7 +447,7 @@ def get_best_next_pc_state(
 
   ~~If `canHold` is False, then assumes that the hold queue is empty and disallows access to it.~~
   """
-  # (queue_index, board_hash, hold) -> set((board_hash, hold))
+  # (queue_index, board_hash, hold) -> set((board_hash, hold, finesse))
   # For each board state, set of the initial states that could have generated the state
   first_placements = defaultdict(set)
 
@@ -443,23 +469,32 @@ def get_best_next_pc_state(
       first_placements,
       queue[queue_index],
       can_hold,
-      transitions
+      transitions,
+      (queue_index == 1)
     )
     for state in next_states:
-      # Initialize first_placements
-      if queue_index == 1:
-        first_placements[state] = set([state])
       # Check if pc
       if state[1] == EMPTY_BOARD_HASH:
         can_pc = True
-        pc_states.add(state)
+        (index, _, hold) = state
+        pc_states.add((index, hold))
       else:
         continuation_queues[queue_index + 1].add(state)
-  
+
   if can_pc:
     # Using other function, off by one because not accounting for first pc
-    most_pcs_at_state = get_max_pc_states(pc_states, queue, pc_set)
-    num_max_pcs = max(most_pcs_at_state.values())[0]
+    most_pcs_at_state = get_max_pc_states(pc_states, queue, pc_set, True)
+    # Remove states with null saves
+    to_remove = []
+    for (index, hold) in most_pcs_at_state:
+      if hold == NULL_SAVE:
+        to_remove.append((index, hold))
+    for removed_state in to_remove:
+      most_pcs_at_state.pop(removed_state)
+    # Compute num_max_pcs
+    num_max_pcs = 0
+    for (index, hold) in most_pcs_at_state:
+      num_max_pcs = max(most_pcs_at_state[(index, hold)][0], num_max_pcs)
     
     # Map piece number to state
     max_pc_continuation_queues = defaultdict(set)
@@ -468,6 +503,10 @@ def get_best_next_pc_state(
 
     # Initial states
     for (index, hold) in most_pcs_at_state:
+      # Check if using max pcs
+      if most_pcs_at_state[(index, hold)][0] != num_max_pcs:
+        continue
+      # Initialize states
       max_pc_continuation_queues[index].add((index, 0, hold))
       max_pc_first_placements[(index, 0, hold)] = most_pcs_at_state[(index, hold)][1]
 
@@ -486,6 +525,23 @@ def get_best_next_pc_state(
         if state[1] == EMPTY_BOARD_HASH:
           assert False, "LOGIC ERROR: HOW BEST PC WHEN CAN STILL PC"
         max_pc_continuation_queues[queue_index + 1].add(state)
+    
+    # Update first placements
+    new_first_placements = {}
+    
+    # Iterate through all final states of max_pc
+    for final_state in max_pc_first_placements:
+      (queue_index, _, _) = final_state
+      # Ignore states that are not at the end
+      if queue_index != len(queue):
+        continue
+      # Add all corresponding first placements from first pc state
+      new_first_placements[final_state] = set()
+      for (index, hold) in max_pc_first_placements[final_state]:
+        first_pc_state = (index, 0, hold)
+        new_first_placements[final_state] = new_first_placements[final_state].union(first_placements[first_pc_state])
+
+    first_placements = new_first_placements
 
   # Construct set of states reachable from first placements
   # (board_hash, hold) -> set((queue_index, board_hash, hold))
@@ -538,3 +594,96 @@ def get_best_next_pc_state(
       best_initial_state = first_state
 
   return best_initial_state
+
+# inf pc simulator
+# simulation_length is number of pieces to simulate
+def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: int = 6, foresight: int = 1, canHold: bool = True, tc_cache_filename: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
+  """Infinite pc simulator.
+
+  Prints a simulation of the pc decisions taken.
+
+  `simulation_length` is number of pieces to simulate.
+
+  `lookahead` is the number of pieces to consider at a time for computation.
+
+  `foresight` is the length of the foresight queue.
+  This is used to account for the next `foresight` pieces.
+  This is then accounted for when selecting a continuation.
+
+  If `canHold` is False, then assumes that the hold queue is empty and disallows access to it.
+
+  `tc_cache_filename` is the file name of the transition cache to load or save from.
+  If `tc_cache_filename` is None, will not save the cache at the end.
+
+  `starting_state` is the hash of the intial board state.
+  """
+  pieces = board_lib.generate_7bag()
+  pc_decisions = []
+  pc_numbers = []
+
+  # initialize game state
+  max_hash = 0
+  current_hash = starting_state
+  current_minos = 0
+  hold = next(pieces)
+  window = ""
+  for _ in range(lookahead):
+    window += next(pieces)
+  num_pcs = 0
+  
+  if tc_cache_filename is not None:
+    board_lib.load_caches(tc_cache_filename, True)
+
+  pc_data = load_pc_queues(pc_filename)
+  pc_set = build_pc_set(pc_data)
+  transitions = build_state_transitions(pc_data)
+  
+  pc_distances = build_pc_distances(pc_data)
+
+  time_sum = 0
+  time_num = 0
+  current_pc = ""
+  for decision_num in range(simulation_length):
+    # compute next state
+    next_queue = hold + window if canHold else window
+    time_start = time.time()
+
+    #try:
+    next_state = get_best_next_pc_state(current_hash, next_queue, pc_set, transitions, pc_distances, foresight, canHold)
+    #except:
+      #board_lib.save_caches("data/corrupted")
+      #break
+    time_elapsed = time.time() - time_start
+    time_sum += time_elapsed
+    time_num += 1
+    (current_hash, next_hold, finesse) = next_state
+    used = window[0] if next_hold == hold else hold
+    current_pc += used
+    hold = next_hold
+
+    # compute next window
+    window = window[1:] + next(pieces)
+
+    # handle pc logic
+    if current_hash == EMPTY_BOARD_HASH:
+      num_pcs += 1
+      pc_numbers.append(len(current_pc))
+      pc_decisions.append(current_pc)
+      current_pc = ""
+    
+    # display board and game state
+    board_lib.display_board(current_hash)
+    print(f"Used {used}, next pieces [{hold}]{window}")
+    print(f"pc/p: {round(num_pcs/time_num, 4)}, pps = {round(1/time_elapsed, 2)}")
+    input()
+
+  print(pc_numbers)
+  
+  print(f"Average pc length: {sum([_*_ for _ in pc_numbers]) / sum(pc_numbers)}")
+  print(f"Average pieces per pc: {sum(pc_numbers) / len(pc_numbers)}")
+  print(f"Average pps: {time_num / time_sum}")
+
+  if tc_cache_filename != None:
+    board_lib.save_caches(tc_cache_filename)
+
+  return pc_decisions
