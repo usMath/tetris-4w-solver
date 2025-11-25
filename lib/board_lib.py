@@ -24,7 +24,7 @@ CoordinateList: TypeAlias = List[Coordinate]
 CoordinateSet: TypeAlias = Set[Coordinate]
 Board: TypeAlias = List[List[int]]
 BoardHash: TypeAlias = int
-Finesse: TypeAlias = str
+Finesse: TypeAlias = int
 PieceFinesse: TypeAlias = List[Finesse]
 
 def get_pieces_from_file(filename: str) -> Dict[Piece, Dict[int, CoordinateList]]:
@@ -558,6 +558,52 @@ def get_next_boards_given_queue(board_hash: BoardHash, queue: Queue) -> List[Boa
       new_boards = new_boards.union(set(get_next_boards(board, piece).keys()))
     boards = new_boards
   return sorted(boards)
+
+def get_next_board_states(
+  input_states: Set[Tuple],
+  origins: Dict[Tuple, Set[Tuple]],
+  piece: Piece,
+  can_hold: bool,
+  transitions: Dict[Tuple[BoardHash, Piece], Dict[BoardHash, List[Finesse]]]
+) -> Set[Tuple]:
+  """
+  Returns the set of reachable next states.
+
+  Also updates initial placements dictionary, which tracks the starting placements
+  from which it is possible to obtain the current state.
+  """
+  next_states = set()
+
+  for state in input_states:
+    queue_index = state[0]
+    board_hash = state[1]
+    previous_origins = set()
+    if state in origins:
+      previous_origins = origins[state]
+    # Iterate through each next state
+    for next_board_hash in transitions[(board_hash, piece)]:
+      next_state = (queue_index + 1, next_board_hash, *state[2:])
+      # Update origins
+      if next_state not in origins:
+        origins[next_state] = set()
+      origins[next_state] = origins[next_state].union(previous_origins)
+      # Update next_states
+      next_states.add(next_state)
+    
+    # Handle holding
+    if not can_hold:
+      continue
+    hold = state[2]
+    for next_board_hash in transitions[(board_hash, hold)]:
+      next_state = (queue_index + 1, next_board_hash, piece)
+      # Update origin
+      if next_state not in origins:
+        origins[next_state] = set()
+      origins[next_state] = origins[next_state].union(previous_origins)
+      # Update next_states
+      next_states.add(next_state)
+
+  return next_states
 
 def get_previous_boards(
     board_hash: BoardHash,

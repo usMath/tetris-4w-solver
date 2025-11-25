@@ -50,6 +50,7 @@ def get_best_next_combo_state(board_hash: int, queue: str, foresight: int = 1, c
   # (hold, queue_index, board_state) -> (combo breaks, num_spins)
   least_breaks = {}
 
+  best_end_state = None
   for max_breaks in range(BREAKS_LIMIT+1):
     
     # Track what we have explored.
@@ -131,12 +132,12 @@ def get_best_next_combo_state(board_hash: int, queue: str, foresight: int = 1, c
               if queue_index >= 2:
                 if next_state not in reversed_immediate_placements:
                   reversed_immediate_placements[next_state] = {}
-                for start_state in reversed_immediate_placements[current_state]:
+                for start_state in reversed_immediate_placements[state]:
                   if (
                     start_state not in reversed_immediate_placements[next_state]
-                    or reversed_immediate_placements[current_state][start_state] > reversed_immediate_placements[next_state][start_state]
+                    or reversed_immediate_placements[state][start_state] > reversed_immediate_placements[next_state][start_state]
                   ):
-                    reversed_immediate_placements[next_state][start_state] = reversed_immediate_placements[current_state][start_state]
+                    reversed_immediate_placements[next_state][start_state] = reversed_immediate_placements[state][start_state]
 
       # add states in new_least_breaks_set to least_breaks
       for state in new_least_breaks:
@@ -253,6 +254,7 @@ def get_best_next_combo_state(board_hash: int, queue: str, foresight: int = 1, c
     # We also add number based on future mino count to score
 
     best_end_state = None
+    state = None
     best_score = len(queue) * 1000000 * 10**foresight
     for state in immediate_placements:
       if len(immediate_placements[state]) == 0:
@@ -312,12 +314,8 @@ def get_best_next_combo_state(board_hash: int, queue: str, foresight: int = 1, c
     if best_end_state is not None:
       break
   
-  if best_end_state is None:
-    # bot kinda screwed so just pick the last thing it was thinking of
-    best_end_state = state
-    # we really shouldn't get here so uhhh idk
-    # print("FK", flush = True)
-  
+  assert best_end_state is not None, "WTF HAPPENED"
+
   (end_hold, end_hash) = best_end_state
 
   # output for bot
@@ -435,6 +433,8 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
   if tc_cache_filename is not None:
     board_lib.load_caches(tc_cache_filename, True)
 
+  time_sum = 0
+  time_num = 0
   for decision_num in range(simulation_length):
     # compute next state
     num_minos = board_lib.num_minos(current_hash)
@@ -448,6 +448,8 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
       #board_lib.save_caches("data/corrupted")
       #break
     time_elapsed = time.time() - time_start
+    time_sum += time_elapsed
+    time_num += 1
     (hold, current_hash) = next_state
     combo_decisions.append(next_state)
 
@@ -481,7 +483,9 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
   while max_hash > 0:
     max_hash //= 16
     height += 1
-  print(height)
+  print(f"Max height: {height}")
+  print(f"Average combo: {sum([_*_ for _ in combo_numbers]) / sum(combo_numbers)}")
+  print(f"Average pps: {time_num / time_sum}")
 
   if tc_cache_filename != None:
     board_lib.save_caches(tc_cache_filename)
