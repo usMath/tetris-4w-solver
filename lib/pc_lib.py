@@ -79,13 +79,16 @@ def generate_all_pc_queues(
         new_history_boards = (previous_board, *history_boards)
         new_history_finesse = (finesse, *history_finesse)
         new_history = (new_history_queue, new_history_boards, new_history_finesse)
-        if previous_board != 0 and previous_board < max_board:
-          backwards_reachable_states[previous_board][(new_history_queue, new_history_boards)] = new_history_finesse
-          if len(new_history_queue) < n_backwards:
-            next_state = (previous_board, new_history)
-            if next_state not in visited:
-              visited.add(next_state)
-              backwards_queue.append(next_state)
+        if previous_board == 0 or previous_board >= max_board:
+          continue
+        backwards_reachable_states[previous_board][(new_history_queue, new_history_boards)] = new_history_finesse
+        if len(new_history_queue) >= n_backwards:
+          continue
+        next_state = (previous_board, new_history)
+        if next_state in visited:
+          continue
+        visited.add(next_state)
+        backwards_queue.append(next_state)
   
   # Forwards direction
   forwards_queue = deque()
@@ -114,24 +117,28 @@ def generate_all_pc_queues(
         new_history_boards = (*history_boards, next_board)
         new_history_finesse = (*history_finesse, finesse)
         new_history = (new_history_queue, new_history_boards, new_history_finesse)
-        if next_board < max_board and next_board != 0:
-          if next_board in backwards_reachable_states:
-            forwards_reachable_states[next_board][(new_history_queue, new_history_boards)] = new_history_finesse
-          if len(new_history_queue) < n_forwards:
-            next_state = (next_board, new_history)
-            if next_state not in visited:
-              visited.add(next_state)
-              forwards_queue.append(next_state)
+        if next_board == 0 or next_board >= max_board:
+          continue
+        if next_board in backwards_reachable_states:
+          forwards_reachable_states[next_board][(new_history_queue, new_history_boards)] = new_history_finesse
+        if len(new_history_queue) >= n_forwards:
+          continue
+        next_state = (next_board, new_history)
+        if next_state in visited:
+          continue
+        visited.add(next_state)
+        forwards_queue.append(next_state)
   
   # Merge forwards and backwards
   for board_hash in forwards_reachable_states:
-    if board_hash in backwards_reachable_states:
-      for first_half in forwards_reachable_states[board_hash]:
-        for second_half in backwards_reachable_states[board_hash]:
-          combined_queue = first_half[0] + second_half[0]
-          combined_board_states = first_half[1][:-1] + second_half[1]
-          combined_finesse = forwards_reachable_states[board_hash][first_half] + backwards_reachable_states[board_hash][second_half]
-          pcs[(combined_queue,combined_board_states)] = combined_finesse
+    if board_hash not in backwards_reachable_states:
+      continue
+    for first_half in forwards_reachable_states[board_hash]:
+      for second_half in backwards_reachable_states[board_hash]:
+        combined_queue = first_half[0] + second_half[0]
+        combined_board_states = first_half[1][:-1] + second_half[1]
+        combined_finesse = forwards_reachable_states[board_hash][first_half] + backwards_reachable_states[board_hash][second_half]
+        pcs[(combined_queue,combined_board_states)] = combined_finesse
   
   pcs[("I", ())] = [(),]  # Edge case
   
@@ -428,7 +435,7 @@ def get_best_next_pc_state(
     foresight: int = 1,
     can_hold: bool = True
   ) -> Tuple[BoardHash, Piece, PieceFinesse]:
-  """Computes best next board state.
+  """Computes best next board state: `(boardhash, hold, finesse)`
 
   First, attempts to maximize expected number of pcs over next `len(queue) - 1 + foresight` pieces.
   Among those, minimizes the minimum distance from next pc.
@@ -540,7 +547,6 @@ def get_best_next_pc_state(
       for (index, hold) in max_pc_first_placements[final_state]:
         first_pc_state = (index, 0, hold)
         new_first_placements[final_state] = new_first_placements[final_state].union(first_placements[first_pc_state])
-
     first_placements = new_first_placements
 
   # Construct set of states reachable from first placements
@@ -574,7 +580,7 @@ def get_best_next_pc_state(
   
   # Compute combined scores for all initial states
   best_initial_score_sum = max_foresight_score * 7 ** foresight
-  best_initial_state = (EMPTY_BOARD_HASH, NULL_SAVE, [])
+  best_initial_state = (EMPTY_BOARD_HASH, NULL_SAVE, None)
 
   # For every initial state
   for first_state in reachables:
@@ -674,8 +680,8 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: 
     # display board and game state
     board_lib.display_board(current_hash)
     print(f"Used {used}, next pieces [{hold}]{window}")
+    print(f"Finesse: {finesse}")
     print(f"pc/p: {round(num_pcs/time_num, 4)}, pps = {round(1/time_elapsed, 2)}")
-    input()
 
   print(pc_numbers)
   

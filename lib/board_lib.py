@@ -564,7 +564,7 @@ def get_next_board_states(
   origins: Dict[Tuple, Set[Tuple]],
   piece: Piece,
   can_hold: bool,
-  transitions: Dict[Tuple[BoardHash, Piece], Dict[BoardHash, List[Finesse]]],
+  transitions: Dict[Tuple[BoardHash, Piece], Dict[BoardHash, PieceFinesse]],
   initialize_origins: bool = False
 ) -> Set[Tuple]:
   """
@@ -608,10 +608,14 @@ def get_next_board_states(
       # Iterate through each next state
       for next_board_hash in transitions[(board_hash, hold)]:
         next_state = (queue_index + 1, next_board_hash, piece)
-        # Update origin
-        if next_state not in origins:
+        # Update origins
+        if initialize_origins:
           origins[next_state] = set()
-        origins[next_state] = origins[next_state].union(previous_origins)
+          origins[next_state].add((next_board_hash, piece, transitions[(board_hash, hold)][next_board_hash]))
+        else:
+          if next_state not in origins:
+            origins[next_state] = set()
+          origins[next_state] = origins[next_state].union(previous_origins)
         # Update next_states
         next_states.add(next_state)
 
