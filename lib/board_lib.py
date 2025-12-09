@@ -583,6 +583,7 @@ def get_next_board_states(
     previous_origins = set()
     if state in origins:
       previous_origins = origins[state]
+    
     # Check for valid states
     if (board_hash, piece) in transitions:
       # Iterate through each next state
@@ -603,6 +604,9 @@ def get_next_board_states(
     if not can_hold:
       continue
     hold = state[2]
+
+    # TODO make this section a function after verifying everything else works
+
     # Check for valid states
     if (board_hash, hold) in transitions:
       # Iterate through each next state

@@ -316,8 +316,7 @@ def get_max_pc_states(
 def max_pcs_in_queue(piece_queue: Queue, pc_set: Set[Queue]) -> Tuple[int, List[Queue]]:
   """Computes the maximum number of pcs that can be obtained in the given queue, and the list of PCs taken.
   """
-  # Length of longest pc
-  max_n = len(max(pc_set, key = lambda _:len(_)))
+  # Add terminator character to allow for using whole queue
   piece_queue = piece_queue + NULL_SAVE
 
   # Set of initial pcs
@@ -343,6 +342,10 @@ def max_pcs_in_queue(piece_queue: Queue, pc_set: Set[Queue]) -> Tuple[int, List[
     current_state = most_pcs_at_state[current_state][1]
   history = list(reversed(reversed_history))
   return (max_pcs, history)
+
+# TODO implement foresight score caching.
+# given final state, data tag (to distinguish transitions / pc_distances) and foresight, and can_hold,
+# output score dictionary for each foresight queue
 
 def compute_foresight_scores(
     final_states: List[Tuple[int, BoardHash, Piece]],
@@ -485,8 +488,8 @@ def get_best_next_pc_state(
         can_pc = True
         (index, _, hold) = state
         pc_states.add((index, hold))
-      else:
-        continuation_queues[queue_index + 1].add(state)
+        continue
+      continuation_queues[queue_index + 1].add(state)
 
   if can_pc:
     # Using other function, off by one because not accounting for first pc
@@ -530,7 +533,11 @@ def get_best_next_pc_state(
       for state in next_states:
         # Check if pc
         if state[1] == EMPTY_BOARD_HASH:
-          assert False, "LOGIC ERROR: HOW BEST PC WHEN CAN STILL PC"
+          # TODO: figure out what to do in this case
+          # getting here means we found a pc that wasn't in the set, like accidentally stumbling on a pc
+          # so in spirit of not knowing that pc exists we won't think it pcs.
+          # continue
+          pass
         max_pc_continuation_queues[queue_index + 1].add(state)
     
     # Update first placements
@@ -682,10 +689,8 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: 
     print(f"Used {used}, next pieces [{hold}]{window}")
     print(f"Finesse: {finesse}")
     print(f"pc/p: {round(num_pcs/time_num, 4)}, pps = {round(1/time_elapsed, 2)}")
-
-  print(pc_numbers)
   
-  print(f"Average pc length: {sum([_*_ for _ in pc_numbers]) / sum(pc_numbers)}")
+  # print(f"Average pc length: {sum([_*_ for _ in pc_numbers]) / sum(pc_numbers)}")
   print(f"Average pieces per pc: {sum(pc_numbers) / len(pc_numbers)}")
   print(f"Average pps: {time_num / time_sum}")
 
