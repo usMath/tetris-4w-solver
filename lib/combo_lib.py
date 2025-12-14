@@ -386,7 +386,7 @@ def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6,
   for decision_num in range(len(queue) - 1):
     # compute next state
     next_state = get_best_next_combo_state(current_hash, hold + window, foresight, can180, canHold)
-    (hold, current_hash) = next_state
+    (current_hash, hold, finesse) = next_state
     combo.append(next_state)
 
     # compute next window
