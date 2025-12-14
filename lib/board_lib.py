@@ -24,6 +24,7 @@ CoordinateList: TypeAlias = List[Coordinate]
 CoordinateSet: TypeAlias = Set[Coordinate]
 Board: TypeAlias = List[List[int]]
 BoardHash: TypeAlias = int
+IndexState: TypeAlias = Tuple[int, BoardHash, Piece]
 Finesse: TypeAlias = int
 PieceFinesse: TypeAlias = Tuple[Finesse]
 
@@ -60,6 +61,8 @@ def get_piece_widths(pieces: Dict[Piece, Dict[int, CoordinateList]]) -> Dict[Pie
 
 PIECES = get_pieces_from_file(PIECES_FILENAME)
 PIECE_WIDTHS = get_piece_widths(PIECES)
+# Null piece
+NULL_PIECE = "?"
 
 def get_kicks_from_file(filename: str) -> Dict[Piece, Dict[int, Dict[int, CoordinateList]]]:
   """Reads kick data from a text file.
@@ -560,17 +563,16 @@ def get_next_boards_given_queue(board_hash: BoardHash, queue: Queue) -> List[Boa
   return sorted(boards)
 
 def get_next_board_states(
-  input_states: Set[Tuple],
-  origins: Dict[Tuple, Set[Tuple]],
+  input_states: Set[IndexState],
+  origins: Dict[IndexState, Set[Tuple[BoardHash, Piece, PieceFinesse]]],
   piece: Piece,
-  can_hold: bool,
   transitions: Dict[Tuple[BoardHash, Piece], Dict[BoardHash, PieceFinesse]],
   initialize_origins: bool = False
-) -> Set[Tuple]:
+) -> Set[IndexState]:
   """
   Returns the set of reachable next states.
 
-  Also updates initial placements dictionary, which tracks the starting placements
+  Also updates initial placements dictionary `origins`, which tracks the starting placements
   from which it is possible to obtain the current state.
 
   If `initialize_origins` is True, will initialize origins dictionary.
@@ -578,50 +580,32 @@ def get_next_board_states(
   next_states = set()
 
   for state in input_states:
-    queue_index = state[0]
-    board_hash = state[1]
+    (queue_index, board_hash, hold) = state
     previous_origins = set()
     if state in origins:
       previous_origins = origins[state]
     
-    # Check for valid states
-    if (board_hash, piece) in transitions:
-      # Iterate through each next state
-      for next_board_hash in transitions[(board_hash, piece)]:
-        next_state = (queue_index + 1, next_board_hash, *state[2:])
-        # Update origins
-        if initialize_origins:
-          origins[next_state] = set()
-          origins[next_state].add((next_board_hash, *state[2:], transitions[(board_hash, piece)][next_board_hash]))
-        else:
-          if next_state not in origins:
-            origins[next_state] = set()
-          origins[next_state] = origins[next_state].union(previous_origins)
-        # Update next_states
-        next_states.add(next_state)
-    
+    next_state_pieces = [(hold, piece)]
     # Handle holding
-    if not can_hold:
-      continue
-    hold = state[2]
-
-    # TODO make this section a function after verifying everything else works
-
-    # Check for valid states
-    if (board_hash, hold) in transitions:
-      # Iterate through each next state
-      for next_board_hash in transitions[(board_hash, hold)]:
-        next_state = (queue_index + 1, next_board_hash, piece)
-        # Update origins
-        if initialize_origins:
-          origins[next_state] = set()
-          origins[next_state].add((next_board_hash, piece, transitions[(board_hash, hold)][next_board_hash]))
-        else:
-          if next_state not in origins:
+    if hold != NULL_PIECE:
+      next_state_pieces.append((piece, hold))
+    
+    for (next_hold, used) in next_state_pieces:
+      # Check for valid states
+      if (board_hash, used) in transitions:
+        # Iterate through each next state
+        for next_board_hash in transitions[(board_hash, used)]:
+          next_state = (queue_index + 1, next_board_hash, next_hold)
+          # Update origins
+          if initialize_origins:
             origins[next_state] = set()
-          origins[next_state] = origins[next_state].union(previous_origins)
-        # Update next_states
-        next_states.add(next_state)
+            origins[next_state].add((next_board_hash, next_hold, transitions[(board_hash, used)][next_board_hash]))
+          else:
+            if next_state not in origins:
+              origins[next_state] = set()
+            origins[next_state] = origins[next_state].union(previous_origins)
+          # Update next_states
+          next_states.add(next_state)
 
   return next_states
 

@@ -4,13 +4,14 @@ from lib.board_lib import EMPTY_BOARD_HASH
 
 from collections import defaultdict, deque
 import os
+import pickle
 import time
 from typing import Dict, List, Optional, Set, Tuple, TypeAlias
 
 PC_State_Transitions: TypeAlias = Dict[Tuple[BoardHash, Piece], Dict[BoardHash, PieceFinesse]]
 
 # Represents a null save
-NULL_SAVE = "?"
+NULL_SAVE = board_lib.NULL_PIECE
 
 def generate_all_pc_queues(
     filename: str,
@@ -169,12 +170,19 @@ def load_pc_queues(filename: str) -> Dict[Tuple[Queue, Tuple[BoardHash]], List[P
       pcs[(pc_queue, board_hashes)] = finesse_list
   return pcs
 
+# Set of all PCs
+PC_SET = set()
+
 def build_pc_set(pcs: Dict[Tuple[Queue, Tuple[BoardHash]], List[PieceFinesse]]) -> Set[Queue]:
   """Returns set of all pcs"""
-  pc_set = set()
+  global PC_SET
+  PC_SET = set()
   for (queue, _) in pcs:
-    pc_set.add(queue)
-  return pc_set
+    PC_SET.add(queue)
+  return PC_SET
+
+# Board state transition graph
+PC_TRANSITIONS = {}
 
 def build_state_transitions(
     pcs: Dict[Tuple[Queue, Tuple[BoardHash]], List[PieceFinesse]]
@@ -183,7 +191,8 @@ def build_state_transitions(
 
   Returns, for each input board hash and input piece, all possible resulting board states with the finesse needed.
   """
-  pc_state_transitions = {}
+  global PC_TRANSITIONS
+  PC_TRANSITIONS = {}
 
   # Iterate through each board state sequence
   for board_state_sequence in pcs:
@@ -198,19 +207,23 @@ def build_state_transitions(
     for piece_num in range(n):
       initial_state = (board_hash_list[piece_num - 1], queue[piece_num])
       # Check for membership in state transitions
-      if initial_state not in pc_state_transitions:
-        pc_state_transitions[initial_state] = {}
+      if initial_state not in PC_TRANSITIONS:
+        PC_TRANSITIONS[initial_state] = {}
       # Add finesse
-      pc_state_transitions[initial_state][board_hash_list[piece_num]] = finesse_list[piece_num]
+      PC_TRANSITIONS[initial_state][board_hash_list[piece_num]] = finesse_list[piece_num]
   
-  return pc_state_transitions
+  return PC_TRANSITIONS
+
+# Maps board hash to minimum pieces to pc in best case
+PC_DISTANCES = {}
 
 def build_pc_distances(
     pcs: Dict[Tuple[Queue, Tuple[BoardHash]], List[PieceFinesse]]
   ) -> Dict[BoardHash, int]:
   """Computes, for each board hash, the minimum number of pieces to PC."""
-  pc_distances = {}
-  pc_distances[EMPTY_BOARD_HASH] = 1
+  global PC_DISTANCES
+  PC_DISTANCES = {}
+  PC_DISTANCES[EMPTY_BOARD_HASH] = 1
 
   # Iterate through all pc queues
   for (queue, board_hash_list) in pcs:
@@ -220,10 +233,10 @@ def build_pc_distances(
       board_hash = board_hash_list[piece_num]
       distance = n - 1 - piece_num
       # Update distances
-      if board_hash not in pc_distances or pc_distances[board_hash] > distance:
-        pc_distances[board_hash] = distance
+      if board_hash not in PC_DISTANCES or PC_DISTANCES[board_hash] > distance:
+        PC_DISTANCES[board_hash] = distance
     
-  return pc_distances
+  return PC_DISTANCES
 
 def compute_pieces_to_next_pc(transitions: PC_State_Transitions) -> Dict[Tuple[BoardHash, Piece], float]:
   """Computes expected number of pieces before next PC.
@@ -237,7 +250,7 @@ def compute_pieces_to_next_pc(transitions: PC_State_Transitions) -> Dict[Tuple[B
   # This will take FOREVER though....
   return {}
 
-def get_pc_saves(piece_queue: Queue, pcs: Set[Queue]) -> Dict[Piece, Queue]:
+def get_pc_saves(piece_queue: Queue) -> Dict[Piece, Queue]:
   """Determines the set of saves for a given piece queue, given set of pcs.
 
   Returns a dictionary: `{saved_piece : pc_queue}`.
@@ -249,16 +262,15 @@ def get_pc_saves(piece_queue: Queue, pcs: Set[Queue]) -> Dict[Piece, Queue]:
   """
   saves = {}
   for queue_order in board_lib.get_queue_orders(piece_queue):
-    if queue_order[:-1] in pcs:
+    if queue_order[:-1] in PC_SET:
       saves[queue_order[-1]] = queue_order[:-1]
-    if queue_order in pcs:
+    if queue_order in PC_SET:
       saves[NULL_SAVE] = queue_order
   return saves
 
 def get_max_pc_states(
     pc_states: Set[Tuple[int, Piece]],
     piece_queue: Queue,
-    pc_set: Set[Queue],
     track_first: bool = False
   ) -> Dict[Tuple[int, Piece], Tuple[int, Tuple[int, Piece] | Set[Tuple[int, Piece]], Queue]]:
   """
@@ -267,7 +279,7 @@ def get_max_pc_states(
   If `track_first` is True, will track the initial placement instead of previous.
   """
   # Length of longest pc
-  max_n = len(max(pc_set, key = lambda _:len(_)))
+  max_n = len(max(PC_SET, key = lambda _:len(_)))
   piece_queue = piece_queue + NULL_SAVE
 
   # (index, hold piece) -> (num pcs, previous state, previous solve)
@@ -294,7 +306,7 @@ def get_max_pc_states(
 
         # The effective pc queue
         pc_queue = hold + piece_queue[index:index + pieces_used]
-        saves = get_pc_saves(pc_queue, pc_set)
+        saves = get_pc_saves(pc_queue)
         for save in saves:
           next_state = (index + pieces_used, save)
 
@@ -313,7 +325,7 @@ def get_max_pc_states(
   
   return most_pcs_at_state
 
-def max_pcs_in_queue(piece_queue: Queue, pc_set: Set[Queue]) -> Tuple[int, List[Queue]]:
+def max_pcs_in_queue(piece_queue: Queue) -> Tuple[int, List[Queue]]:
   """Computes the maximum number of pcs that can be obtained in the given queue, and the list of PCs taken.
   """
   # Add terminator character to allow for using whole queue
@@ -323,7 +335,7 @@ def max_pcs_in_queue(piece_queue: Queue, pc_set: Set[Queue]) -> Tuple[int, List[
   pc_states = set()
   pc_states.add((1, piece_queue[0]))
   # (index, hold piece) -> (num pcs, previous state, previous solve)
-  most_pcs_at_state = get_max_pc_states(pc_states, piece_queue, pc_set)
+  most_pcs_at_state = get_max_pc_states(pc_states, piece_queue)
   
   # Best state
   (max_pcs, current_state, prev_solve) = max(most_pcs_at_state.values())
@@ -343,24 +355,34 @@ def max_pcs_in_queue(piece_queue: Queue, pc_set: Set[Queue]) -> Tuple[int, List[
   history = list(reversed(reversed_history))
   return (max_pcs, history)
 
-# TODO implement foresight score caching.
-# given final state, data tag (to distinguish transitions / pc_distances) and foresight, and can_hold,
-# output score dictionary for each foresight queue
+# Map of state to foresight score set
+# different files for different N (of PC set) and foresight
+# [(hash, hold_piece, can_hold)] -> (foresight_queue -> score)
+PC_FORESIGHT_CACHE = {}
 
 def compute_foresight_scores(
     final_states: List[Tuple[int, BoardHash, Piece]],
-    transitions: PC_State_Transitions,
-    pc_distances: Dict[BoardHash, int],
     foresight: int = 1,
     can_hold: bool = True
 ) -> Dict[Tuple[int, BoardHash, Piece], Dict[Queue, int]]:
   """Given ending states and num foresight pieces, returns a dictionary mapping each ending state and foresight queue to its best score"""
-  max_foresight_score = foresight + max(pc_distances.values()) + 3
+  global PC_FORESIGHT_CACHE
+  
+  max_foresight_score = foresight + max(PC_DISTANCES.values()) + 3
   foresight_scores = {}
   
+  # Uncached states
+  new_final_states = []
+  cached_final_states = []
+
   # Initialize foresight_scores
   for final_state in final_states:
+    # Skip cached states
+    if (*final_state[1:], can_hold) in PC_FORESIGHT_CACHE:
+      cached_final_states.append(final_state)
+      continue
     foresight_scores[final_state] = {}
+    new_final_states.append(final_state)
 
   # Look at each foresight queue
   for foresight_queue in board_lib.all_queues(foresight):
@@ -372,7 +394,7 @@ def compute_foresight_scores(
     foresight_continuation_queues = defaultdict(set)
 
     # Initialize states
-    for final_state in final_states:
+    for final_state in new_final_states:
       foresight_continuation_queues[0].add(final_state)
       foresight_first_placements[final_state].add(final_state)
       foresight_scores[final_state][foresight_queue] = max_foresight_score
@@ -384,8 +406,7 @@ def compute_foresight_scores(
         foresight_continuation_queues[piece_num],
         foresight_first_placements,
         piece,
-        False,
-        transitions
+        PC_TRANSITIONS
       )
     
       # Update pc distances
@@ -402,11 +423,17 @@ def compute_foresight_scores(
     for state in foresight_continuation_queues[foresight]:
       for final_state in foresight_first_placements[state]:
         # Score is min distance from a pc
-        score = foresight + pc_distances[final_state[1]]
+        score = foresight + PC_DISTANCES[final_state[1]]
         new_score = min(foresight_scores[final_state][foresight_queue], score)
         foresight_scores[final_state][foresight_queue] = new_score
 
   if not can_hold:
+    # Add to cache
+    for final_state in foresight_scores:
+      PC_FORESIGHT_CACHE[(final_state[1], final_state[2], can_hold)] = foresight_scores[final_state]
+    # Augment with cached results
+    for final_state in cached_final_states:
+      foresight_scores[final_state] = PC_FORESIGHT_CACHE[(final_state[1], final_state[2], can_hold)]
     return foresight_scores
   
   # Compute combined scores for all final states
@@ -427,14 +454,18 @@ def compute_foresight_scores(
       # Update score
       foresight_scores_with_hold[final_state][foresight_queue] = best_score
 
+  # Add to cache
+  for final_state in foresight_scores_with_hold:
+    PC_FORESIGHT_CACHE[(final_state[1], final_state[2], can_hold)] = foresight_scores_with_hold[final_state]
+  # Augment with cached results
+  for final_state in cached_final_states:
+    foresight_scores_with_hold[final_state] = PC_FORESIGHT_CACHE[(final_state[1], final_state[2], can_hold)]
+
   return foresight_scores_with_hold
 
 def get_best_next_pc_state(
     board_hash: BoardHash,
     queue: Queue,
-    pc_set: Set[Queue],
-    transitions: PC_State_Transitions,
-    pc_distances: Dict[BoardHash, int],
     foresight: int = 1,
     can_hold: bool = True
   ) -> Tuple[BoardHash, Piece, PieceFinesse]:
@@ -455,8 +486,12 @@ def get_best_next_pc_state(
 
   `pc_distances` maps board hashes to the minimum pieces required to PC.
 
-  ~~If `canHold` is False, then assumes that the hold queue is empty and disallows access to it.~~
+  If `can_hold` is False, then assumes that the hold queue is empty and disallows access to it.
   """
+  # Handle nohold
+  if not can_hold:
+    queue = NULL_SAVE + queue
+
   # (queue_index, board_hash, hold) -> set((board_hash, hold, finesse))
   # For each board state, set of the initial states that could have generated the state
   first_placements = defaultdict(set)
@@ -465,7 +500,8 @@ def get_best_next_pc_state(
   # Map piece number to state
   continuation_queues = defaultdict(set)
   # Initial state
-  continuation_queues[1].add((1, board_hash, queue[0]))
+  initial_state = (1, board_hash, queue[0])
+  continuation_queues[1].add(initial_state)
   # Stores if a pc has been found
   can_pc = False
   # Set of states where there is a pc
@@ -478,8 +514,7 @@ def get_best_next_pc_state(
       continuation_queues[queue_index],
       first_placements,
       queue[queue_index],
-      can_hold,
-      transitions,
+      PC_TRANSITIONS,
       (queue_index == 1)
     )
     for state in next_states:
@@ -493,7 +528,7 @@ def get_best_next_pc_state(
 
   if can_pc:
     # Using other function, off by one because not accounting for first pc
-    most_pcs_at_state = get_max_pc_states(pc_states, queue, pc_set, True)
+    most_pcs_at_state = get_max_pc_states(pc_states, queue, True)
     # Remove states with null saves
     to_remove = []
     for (index, hold) in most_pcs_at_state:
@@ -527,8 +562,7 @@ def get_best_next_pc_state(
         max_pc_continuation_queues[queue_index],
         max_pc_first_placements,
         queue[queue_index],
-        can_hold,
-        transitions
+        PC_TRANSITIONS
       )
       for state in next_states:
         # Check if pc
@@ -559,7 +593,7 @@ def get_best_next_pc_state(
   # Construct set of states reachable from first placements
   # (board_hash, hold) -> set((queue_index, board_hash, hold))
   reachables = defaultdict(set)
-  max_foresight_score = foresight + max(pc_distances.values()) + 3
+  max_foresight_score = foresight + max(PC_DISTANCES.values()) + 3
   # score is sum of min number of pieces to pc for each foresight queue
   # maps final state and queue to foresight score
   final_states = []
@@ -579,8 +613,6 @@ def get_best_next_pc_state(
   # Obtain foresight scores
   foresight_scores = compute_foresight_scores(
     final_states,
-    transitions,
-    pc_distances,
     foresight,
     can_hold
   )
@@ -610,7 +642,7 @@ def get_best_next_pc_state(
 
 # inf pc simulator
 # simulation_length is number of pieces to simulate
-def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: int = 6, foresight: int = 1, canHold: bool = True, tc_cache_filename: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
+def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, pc_n: int = 6, lookahead: int = 6, foresight: int = 1, canHold: bool = True, pc_cache_filename: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
   """Infinite pc simulator.
 
   Prints a simulation of the pc decisions taken.
@@ -635,23 +667,20 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: 
   pc_numbers = []
 
   # initialize game state
-  max_hash = 0
   current_hash = starting_state
-  current_minos = 0
   hold = next(pieces)
   window = ""
   for _ in range(lookahead):
     window += next(pieces)
   num_pcs = 0
   
-  if tc_cache_filename is not None:
-    board_lib.load_caches(tc_cache_filename, True)
+  if pc_cache_filename is not None:
+    load_pc_foresight_cache(pc_cache_filename, pc_n, foresight)
 
   pc_data = load_pc_queues(pc_filename)
-  pc_set = build_pc_set(pc_data)
-  transitions = build_state_transitions(pc_data)
-  
-  pc_distances = build_pc_distances(pc_data)
+  build_pc_set(pc_data)
+  build_state_transitions(pc_data)
+  build_pc_distances(pc_data)
 
   time_sum = 0
   time_num = 0
@@ -662,7 +691,7 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: 
     time_start = time.time()
 
     #try:
-    next_state = get_best_next_pc_state(current_hash, next_queue, pc_set, transitions, pc_distances, foresight, canHold)
+    next_state = get_best_next_pc_state(current_hash, next_queue, foresight, canHold)
     #except:
       #board_lib.save_caches("data/corrupted")
       #break
@@ -694,7 +723,25 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, lookahead: 
   print(f"Average pieces per pc: {sum(pc_numbers) / len(pc_numbers)}")
   print(f"Average pps: {time_num / time_sum}")
 
-  if tc_cache_filename != None:
-    board_lib.save_caches(tc_cache_filename)
-
+  if pc_cache_filename != None:
+    save_pc_foresight_cache(pc_cache_filename, pc_n, foresight)
+  
   return pc_decisions
+
+def save_pc_foresight_cache(base_filename: str, pc_n: int, foresight: int) -> None:
+  """Saves `PC_FORESIGHT_CACHE` to `pickle`."""
+  """Also optionally refactors caches."""
+  with open(f"{base_filename}_{pc_n}_{foresight}", 'wb') as output_file:
+    pickle.dump(PC_FORESIGHT_CACHE, output_file)
+
+def load_pc_foresight_cache(base_filename: str, pc_n: int, foresight: int) -> None:
+  """
+  Loads `PC_FORESIGHT_CACHE` and `SIMPLIFICATION_CACHE` from `pickle`.
+  Also optionally refactors caches.
+  """
+  global PC_FORESIGHT_CACHE
+  try:
+    with open(f"{base_filename}_{pc_n}_{foresight}", 'rb') as input_file:
+      PC_FORESIGHT_CACHE = pickle.load(input_file)
+  except:
+    pass
