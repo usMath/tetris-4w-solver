@@ -180,14 +180,14 @@ def get_best_next_combo_state(
     queue = board_lib.NULL_PIECE + queue
 
   # Handle build_up_now
-  num_building_steps = (15 - board_lib.num_minos(board_hash)) // 4
+  num_building_steps = max(0, (15 - board_lib.num_minos(board_hash)) // 4)
 
   # (queue_index, board_hash, hold) -> {(starting_board_hash, hold, finesse) -> num_spins}
   first_placements = {}
   
   # Initial state
   hold = queue[0]
-  initial_state = (1, board_hash, queue[0])
+  initial_state = (1, board_hash, hold)
 
   # Map piece number to state
   continuation_queues = defaultdict(set)
@@ -332,24 +332,16 @@ def get_best_next_combo_state(
       best_first_state = first_state
 
   # output for bot
+  # This is such a scuffed pipeline we better fix this
   (end_hold, _, finesse) = best_first_state
-  finesse_list = []
+  finesse_string = ""
   used = queue[1]
   if end_hold != queue[0]:
     used = queue[0]
-    finesse_list.append("hold")
-  # This is such a scuffed pipeline we better fix this
-  finesse_transform = {
-    board_lib.FINESSE_L : "moveLeft",
-    board_lib.FINESSE_R : "moveRight",
-    board_lib.FINESSE_CW : "rotateCW",
-    board_lib.FINESSE_CCW : "rotateCCW",
-    board_lib.FINESSE_180 : "rotate180",
-    board_lib.FINESSE_SD : "softDrop"
-  }
-  for untransformed_finesse in finesse:
-    finesse_list.append(finesse_transform[untransformed_finesse])
-  print(f"{used} {','.join(finesse_list)}")
+    if can_hold:
+      finesse_string = "hold,"
+  finesse_string += board_lib.transform_finesse(finesse)
+  print(f"{used} {finesse_string}")
   
   return best_first_state
 

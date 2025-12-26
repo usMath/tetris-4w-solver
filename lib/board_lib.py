@@ -113,6 +113,21 @@ FINESSE_180 = 4
 FINESSE_SD = 5
 FINESSE_HOLD = 6
 
+FINESSE_TRANSFORM = {
+    FINESSE_L : "moveLeft",
+    FINESSE_R : "moveRight",
+    FINESSE_CW : "rotateCW",
+    FINESSE_CCW : "rotateCCW",
+    FINESSE_180 : "rotate180",
+    FINESSE_SD : "softDrop"
+  }
+def transform_finesse(piece_finesse: PieceFinesse) -> str:
+  """Converts a piece finesse to a string for bot output."""
+  transformed_finesse = []
+  for keypress in piece_finesse:
+    transformed_finesse.append(FINESSE_TRANSFORM[keypress])
+  return ",".join(transformed_finesse)
+
 def hash_board(board: Board) -> BoardHash:
   """Converts a board state to an integer.
 
