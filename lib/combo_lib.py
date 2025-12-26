@@ -333,7 +333,7 @@ def get_best_next_combo_state(
 
   # output for bot
   # This is such a scuffed pipeline we better fix this
-  (end_hold, _, finesse) = best_first_state
+  (_, end_hold, finesse) = best_first_state
   finesse_string = ""
   used = queue[1]
   if end_hold != queue[0]:
