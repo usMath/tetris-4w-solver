@@ -547,9 +547,10 @@ def recompute_caches() -> None:
   # Recompute each key
   for simplified_key in keys_to_update:
     SIMPLIFICATION_CACHE.pop(simplified_key)
-    new_simplified_hash = simplify_board_hash(*simplified_key, TRANSITION_CACHE[simplified_key])
+    (s_board_hash, s_piece, s_no_breaks, s_can180) = simplified_key
+    new_simplified_hash = simplify_board_hash(s_board_hash, s_piece, s_no_breaks, s_can180, TRANSITION_CACHE[simplified_key])
     # Check if hash remained the same
-    if new_simplified_hash == simplified_key[0]:
+    if new_simplified_hash == s_board_hash:
       continue
     pruned += 1
     # Remove extraneous transition cache entry
@@ -628,7 +629,6 @@ def get_previous_boards(
     board_hash: BoardHash,
     piece: Piece,
     can180: bool = True,
-    forwards_saved_transitions: Optional[Dict[BoardHash, Tuple[bool, PieceFinesse]]] = None
   ) -> Dict[BoardHash, tuple[bool, PieceFinesse]]:
   """Computes all possible previous piece boards given board and piece.
 
@@ -640,12 +640,8 @@ def get_previous_boards(
 
   If `can180` is False, then excludes all 180 finesse.
 
-  `forwards_saved_transitions` is a cache containing the saved results of `get_next_boards`.
-
   Assumes 100g.
   """
-  if forwards_saved_transitions is None:
-    forwards_saved_transitions = {}
   
   # Obtain board
   board = unhash_board(board_hash)
@@ -689,10 +685,9 @@ def get_previous_boards(
   # Ensure it is possible to reach current board state from each candidate previous board state
   boards = {}
   for candidate_previous_board in candidate_previous_boards:
-    if (candidate_previous_board, piece) not in forwards_saved_transitions:
-      forwards_saved_transitions[(candidate_previous_board, piece)] = get_next_boards(candidate_previous_board, piece, can180=can180)
-    if board_hash in forwards_saved_transitions[(candidate_previous_board, piece)]:
-      boards[candidate_previous_board] = forwards_saved_transitions[(candidate_previous_board, piece)][board_hash]
+    transitions = get_next_boards(candidate_previous_board, piece, can180=can180)
+    if board_hash in transitions:
+      boards[candidate_previous_board] = transitions[board_hash]
   
   return boards
 
@@ -706,11 +701,10 @@ def get_previous_boards_given_queue(board_hash: BoardHash, queue: Queue) -> List
   `queue` is a string containing the previous pieces.
   """
   boards = set([board_hash])
-  forwards_saved_transitions = {}
   for piece in reversed(queue):
     prev_boards = set()
     for board in boards:
-      prev_boards = prev_boards.union(set(get_previous_boards(board, piece, forwards_saved_transitions)))
+      prev_boards = prev_boards.union(set(get_previous_boards(board, piece)))
     boards = prev_boards
   return sorted(boards)
 

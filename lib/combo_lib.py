@@ -42,7 +42,7 @@ def get_next_combo_states(
       for next_board_hash in transitions:
         # If no_breaks is False, we only want moves with breaks
         broken = board_lib.num_minos(next_board_hash) > current_mino_count
-        if no_breaks == False and not broken:
+        if not no_breaks and not broken:
           continue
         next_state = (queue_index + 1, next_board_hash, next_hold)
         origins_key = (next_board_hash, next_hold, transitions[next_board_hash][1])
@@ -67,7 +67,7 @@ def get_next_combo_states(
 
   return next_states
 
-MAX_FORESIGHT_SCORE = 1e18
+MAX_FORESIGHT_SCORE = int(1e18)
 
 def compute_combo_foresight_scores(
     final_states: List[IndexState],
@@ -123,7 +123,7 @@ def compute_combo_foresight_scores(
         # spins portion
         foresight_score -= foresight_first_placements[final_foresight_state][final_state]
         foresight_scores[final_state][foresight_queue] = min(foresight_score, foresight_scores[final_state][foresight_queue])
-  
+
   # If no hold we are done
   if not can_hold:
     return foresight_scores
@@ -140,7 +140,7 @@ def compute_combo_foresight_scores(
       combined_queue = hold + foresight_queue
 
       # Compute best score with hold
-      best_score = 1
+      best_score = MAX_FORESIGHT_SCORE
       for queue_order in board_lib.get_queue_orders(combined_queue):
         best_score = min(best_score, foresight_scores[final_state][queue_order[:-1]])
       # Update score
@@ -181,6 +181,9 @@ def get_best_next_combo_state(
 
   # Handle build_up_now
   num_building_steps = max(0, (15 - board_lib.num_minos(board_hash)) // 4)
+  if not build_up_now:
+    # If we are not upstacking, set num upstacking steps to 0
+    num_building_steps = 0
 
   # (queue_index, board_hash, hold) -> {(starting_board_hash, hold, finesse) -> num_spins}
   first_placements = {}
@@ -198,8 +201,8 @@ def get_best_next_combo_state(
   """Step 1: Get ending states"""
   for num_breaks in range(len(queue)+1):
 
-    # Only do this step if not upstacking
-    if not build_up_now or num_breaks >= num_building_steps:
+    # Only do this step if done upstacking
+    if num_breaks >= num_building_steps:
       for queue_index in range(1, len(queue)):
         # Obtain next states
         next_states = get_next_combo_states(
@@ -253,7 +256,7 @@ def get_best_next_combo_state(
       reachables[first_state][final_state] = first_placements[final_state][first_state]
   
   # Best first state
-  best_first_state = (board_lib.EMPTY_BOARD_HASH, board_lib.NULL_PIECE, ())
+  best_first_state = (board_lib.EMPTY_BOARD_HASH, board_lib.NULL_PIECE, (board_lib.FINESSE_HOLD,))
   best_score = MAX_FORESIGHT_SCORE
 
   """Step 2.5: Handle foresight == 0"""
@@ -309,6 +312,7 @@ def get_best_next_combo_state(
     can_hold
   )
   
+  """Step 4: Select best continuation"""
   # For every initial state
   for first_state in reachables:
     # Compute foresight portion
@@ -320,7 +324,7 @@ def get_best_next_combo_state(
       for final_state in reachables[first_state]:
         adjusted_foresight_score = foresight_scores[final_state][foresight_queue]
         # spins correction
-        # adjusted_foresight_score -= first_placements[final_state][first_state]
+        adjusted_foresight_score -= first_placements[final_state][first_state]
         # update best score
         foresight_score = min(foresight_score, adjusted_foresight_score)
       # Update score sum
@@ -345,11 +349,10 @@ def get_best_next_combo_state(
   
   return best_first_state
 
-# Computes best combo continuation
-# if len(queue) - lookahead pieces are placed
-# using lookahead previews and foresight prediction
-# if finish is true, will attempt to place an additional lookahead - 1 pieces
-# (may have suspicious placements at the end)
+def get_break_probability(board_hash: int, queue: str, foresight: int = 1, can180: bool = True, canHold: bool = True) -> float:
+  """Computes probability of combo break given queue and foresight."""
+  return 0
+
 def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6, foresight: int = 1, can180: bool = True, canHold: bool = True, finish: bool = True) -> list[tuple[str, int]]:
   """Computes best combo continuation, placing `len(queue) - lookahead` pieces.
 
@@ -392,8 +395,6 @@ def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6,
     
   return combo
 
-# inf ds simulator
-# simulation_length is number of pieces to simulate
 def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight: int = 1, well_height: int = 8, can_hold: bool = True, tc_cache_filename: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
   """Infinite downstack simulator.
 
@@ -433,8 +434,6 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
   # precompute garbage wells
   well_multiplier = (16**well_height - 1)//15
   wells = [row_code * well_multiplier for row_code in [7, 11, 13, 14]]
-
-  fc = {}
   
   if tc_cache_filename is not None:
     board_lib.load_caches(tc_cache_filename, True)
@@ -497,7 +496,7 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
   print(f"Average combo: {sum([_*_ for _ in combo_numbers]) / sum(combo_numbers)}")
   print(f"Average pps: {time_num / time_sum}")
 
-  if tc_cache_filename != None:
+  if tc_cache_filename is not None:
     board_lib.save_caches(tc_cache_filename)
 
   return combo_decisions
