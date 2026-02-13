@@ -734,14 +734,14 @@ def save_pc_foresight_cache(base_filename: str, pc_n: int, foresight: int) -> No
   with open(f"{base_filename}_{pc_n}_{foresight}", 'wb') as output_file:
     pickle.dump(PC_FORESIGHT_CACHE, output_file)
 
-def load_pc_foresight_cache(base_filename: str, pc_n: int, foresight: int) -> None:
+def load_pc_foresight_cache(folder: str, pc_n: int, foresight: int) -> None:
   """
   Loads `PC_FORESIGHT_CACHE` and `SIMPLIFICATION_CACHE` from `pickle`.
   Also optionally refactors caches.
   """
   global PC_FORESIGHT_CACHE
   try:
-    with open(f"{base_filename}_{pc_n}_{foresight}", 'rb') as input_file:
+    with open(f"{folder}/{pc_n}_{foresight}", 'rb') as input_file:
       PC_FORESIGHT_CACHE = pickle.load(input_file)
   except (FileNotFoundError, EOFError, pickle.UnpicklingError):
     pass
