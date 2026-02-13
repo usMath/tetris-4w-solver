@@ -1,9 +1,9 @@
 import lib.board_lib as board_lib
-from lib.board_lib import Board, BoardHash, Coordinate, CoordinateList, CoordinateSet, Finesse, IndexState, Piece, PieceFinesse, Queue
-from collections import defaultdict, deque
+from lib.board_lib import BoardHash, IndexState, Piece, PieceFinesse, Queue
+from collections import defaultdict
 import random
 import time
-from typing import Dict, List, Optional, Set, Tuple, TypeAlias
+from typing import Dict, List, Set, Tuple
 
 def get_next_combo_states(
   input_states: Set[IndexState],
@@ -281,26 +281,7 @@ def get_best_next_combo_state(
         best_score = score
         best_first_state = first_state
     
-    # output for bot
-    (end_hold, _, finesse) = best_first_state
-    finesse_list = []
-    used = queue[1]
-    if end_hold != queue[0]:
-      used = queue[0]
-      finesse_list.append("hold")
-    # This is such a scuffed pipeline we better fix this
-    finesse_transform = {
-      board_lib.FINESSE_L : "moveLeft",
-      board_lib.FINESSE_R : "moveRight",
-      board_lib.FINESSE_CW : "rotateCW",
-      board_lib.FINESSE_CCW : "rotateCCW",
-      board_lib.FINESSE_180 : "rotate180",
-      board_lib.FINESSE_SD : "softDrop"
-    }
-    for untransformed_finesse in finesse:
-      finesse_list.append(finesse_transform[untransformed_finesse])
-    print(f"{used} {','.join(finesse_list)}")
-
+    # return best next state
     return best_first_state
   
   """Step 3: Handle foresight"""
@@ -335,23 +316,12 @@ def get_best_next_combo_state(
       best_score = initial_score_sum
       best_first_state = first_state
 
-  # output for bot
-  # This is such a scuffed pipeline we better fix this
-  (_, end_hold, finesse) = best_first_state
-  finesse_string = ""
-  used = queue[1]
-  if end_hold != queue[0]:
-    used = queue[0]
-    if can_hold:
-      finesse_string = "hold,"
-  finesse_string += board_lib.transform_finesse(finesse)
-  print(f"{used} {finesse_string}")
-  
+  # return best next state
   return best_first_state
 
 def get_break_probability(board_hash: int, queue: str, foresight: int = 1, can180: bool = True, canHold: bool = True) -> float:
   """Computes probability of combo break given queue and foresight."""
-  return 0
+  return 0  # TODO: REAL function
 
 def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6, foresight: int = 1, can180: bool = True, canHold: bool = True, finish: bool = True) -> list[tuple[str, int]]:
   """Computes best combo continuation, placing `len(queue) - lookahead` pieces.
@@ -447,11 +417,7 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
     next_queue = hold + window if can_hold else window
     time_start = time.time()
 
-    #try:
     next_state = get_best_next_combo_state(current_hash, next_queue, foresight, build_up_now=upstack, can_hold=can_hold)
-    #except:
-      #board_lib.save_caches("data/corrupted")
-      #break
     time_elapsed = time.time() - time_start
     time_sum += time_elapsed
     time_num += 1

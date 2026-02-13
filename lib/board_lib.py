@@ -2,7 +2,7 @@ from collections import deque
 import os.path
 import pickle
 import random
-from typing import Dict, Generator, List, Optional, Set, Tuple, TypeAlias, Callable
+from typing import Dict, Generator, List, Set, Tuple, TypeAlias, Callable
 
 ### UTILITY FUNCTIONS ###
 
@@ -44,8 +44,10 @@ def get_pieces_from_file(filename: str) -> Dict[Piece, Dict[int, CoordinateList]
       row1 = input_file.readline().strip()
       row0 = input_file.readline().strip()
       for i in range(4):
-        if row0[i] != ".": minos.append((0, i-1))
-        if row1[i] != ".": minos.append((1, i-1))
+        if row0[i] != ".":
+          minos.append((0, i-1))
+        if row1[i] != ".":
+          minos.append((1, i-1))
       for rotation in range(4):
         pieces[piece][rotation] = tuple(minos)
         minos = [(-x, y) for (y, x) in minos]
@@ -726,7 +728,7 @@ def load_caches(filename: str, recompute: bool = True) -> None:
   try:
     with open(filename, 'rb') as input_file:
       (TRANSITION_CACHE, SIMPLIFICATION_CACHE) = pickle.load(input_file)
-  except:
+  except (FileNotFoundError, EOFError, pickle.UnpicklingError):
     pass
   if recompute:
     recompute_caches()

@@ -6,7 +6,7 @@ from collections import defaultdict, deque
 import os
 import pickle
 import time
-from typing import Dict, List, Optional, Set, Tuple, TypeAlias
+from typing import Dict, List, Set, Tuple, TypeAlias
 
 PC_State_Transitions: TypeAlias = Dict[Tuple[BoardHash, Piece], Dict[BoardHash, PieceFinesse]]
 
@@ -344,7 +344,7 @@ def max_pcs_in_queue(piece_queue: Queue) -> Tuple[int, List[Queue]]:
   if max_pcs == 0:
     return (0, [])
   
-  assert type(current_state) == tuple, "something went horribly wrong"
+  assert type(current_state) is tuple, "something went horribly wrong"
 
   # Generate pc history
   reversed_history = [prev_solve,]
@@ -723,7 +723,7 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, pc_n: int =
   print(f"Average pieces per pc: {sum(pc_numbers) / len(pc_numbers)}")
   print(f"Average pps: {time_num / time_sum}")
 
-  if pc_cache_filename != None:
+  if pc_cache_filename is not None:
     save_pc_foresight_cache(pc_cache_filename, pc_n, foresight)
   
   return pc_decisions
@@ -743,5 +743,5 @@ def load_pc_foresight_cache(base_filename: str, pc_n: int, foresight: int) -> No
   try:
     with open(f"{base_filename}_{pc_n}_{foresight}", 'rb') as input_file:
       PC_FORESIGHT_CACHE = pickle.load(input_file)
-  except:
+  except (FileNotFoundError, EOFError, pickle.UnpicklingError):
     pass
