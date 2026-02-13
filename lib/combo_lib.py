@@ -10,7 +10,7 @@ def get_next_combo_states(
   origins: Dict[IndexState, Dict[Tuple[BoardHash, Piece, PieceFinesse], int]],
   piece: Piece,
   no_breaks: bool = True,
-  can180: bool = True,
+  can_180: bool = True,
   initialize_origins: bool = False
 ) -> Set[IndexState]:
   """
@@ -37,7 +37,7 @@ def get_next_combo_states(
       next_state_pieces.append((piece, hold))
     
     for (next_hold, used) in next_state_pieces:
-      transitions = board_lib.get_next_boards(board_hash, used, no_breaks, can180)
+      transitions = board_lib.get_next_boards(board_hash, used, no_breaks, can_180)
       
       for next_board_hash in transitions:
         # If no_breaks is False, we only want moves with breaks
@@ -72,7 +72,7 @@ MAX_FORESIGHT_SCORE = int(1e18)
 def compute_combo_foresight_scores(
     final_states: List[IndexState],
     foresight: int = 1,
-    can180: bool = True,
+    can_180: bool = True,
     can_hold: bool = True
 ) -> Dict[IndexState, Dict[Queue, int]]:
   """
@@ -106,7 +106,7 @@ def compute_combo_foresight_scores(
         foresight_first_placements,
         piece,
         True,
-        can180,
+        can_180,
         False
       )
     
@@ -152,7 +152,7 @@ def get_best_next_combo_state(
   board_hash: BoardHash,
   queue: Queue,
   foresight: int = 1,
-  can180: bool = True,
+  can_180: bool = True,
   can_hold: bool = True,
   build_up_now: bool = False
 ) -> Tuple[BoardHash, Piece, PieceFinesse]:
@@ -210,7 +210,7 @@ def get_best_next_combo_state(
           first_placements,
           queue[queue_index],
           True,
-          can180,
+          can_180,
           (queue_index == 1)
         )
         for state in next_states:
@@ -235,7 +235,7 @@ def get_best_next_combo_state(
         first_placements,
         queue[queue_index],
         False,
-        can180,
+        can_180,
         (queue_index == 1)
       )
       for state in next_states:
@@ -289,7 +289,7 @@ def get_best_next_combo_state(
   foresight_scores = compute_combo_foresight_scores(
     final_states,
     foresight,
-    can180,
+    can_180,
     can_hold
   )
   
@@ -319,11 +319,11 @@ def get_best_next_combo_state(
   # return best next state
   return best_first_state
 
-def get_break_probability(board_hash: int, queue: str, foresight: int = 1, can180: bool = True, canHold: bool = True) -> float:
+def get_break_probability(board_hash: int, queue: str, foresight: int = 1, can_180: bool = True, canHold: bool = True) -> float:
   """Computes probability of combo break given queue and foresight."""
   return 0  # TODO: REAL function
 
-def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6, foresight: int = 1, can180: bool = True, canHold: bool = True, finish: bool = True) -> list[tuple[str, int]]:
+def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6, foresight: int = 1, can_180: bool = True, canHold: bool = True, finish: bool = True) -> list[tuple[str, int]]:
   """Computes best combo continuation, placing `len(queue) - lookahead` pieces.
 
   `board_hash` is the hash of the input board.
@@ -336,7 +336,7 @@ def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6,
   This is used to compute the probability that the next `foresight` pieces will force a non line clear.
   This is then accounted for when selecting a continuation.
 
-  If `can180` is False, then excludes all 180 finesse.
+  If `can_180` is False, then excludes all 180 finesse.
 
   If `canHold` is False, then assumes that the hold queue is empty and disallows access to it.
 
@@ -350,7 +350,7 @@ def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6,
 
   for decision_num in range(len(queue) - 1):
     # compute next state
-    next_state = get_best_next_combo_state(current_hash, hold + window, foresight, can180, canHold)
+    next_state = get_best_next_combo_state(current_hash, hold + window, foresight, can_180, canHold)
     (current_hash, hold, finesse) = next_state
     combo.append(next_state)
 

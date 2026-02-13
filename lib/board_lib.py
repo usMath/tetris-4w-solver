@@ -322,7 +322,7 @@ def get_next_boards(
     board_hash: BoardHash,
     piece: Piece,
     no_breaks: bool = False,
-    can180: bool = True
+    can_180: bool = True
   ) -> Dict[BoardHash, Tuple[bool, PieceFinesse]]:
   """Computes and caches all possible piece placements given board and piece.
 
@@ -334,16 +334,16 @@ def get_next_boards(
 
   If `no_breaks` is True, then only returns placements that do not break combo.
 
-  If `can180` is False, then excludes all 180 finesse.
+  If `can_180` is False, then excludes all 180 finesse.
 
   Assumes 100g.
   """
   # Check to see if board_hash and piece is already in cache
-  cache_key = (board_hash, piece, no_breaks, can180)
+  cache_key = (board_hash, piece, no_breaks, can_180)
   
   if cache_key in SIMPLIFICATION_CACHE:
     simplified_hash = SIMPLIFICATION_CACHE[cache_key]
-    simplified_key = (simplified_hash, piece, no_breaks, can180)
+    simplified_key = (simplified_hash, piece, no_breaks, can_180)
 
     # Get hash transformation function
     simplified_hash = simplified_key[0]
@@ -399,7 +399,7 @@ def get_next_boards(
             previous[(newState, False)] = (current, (x_finesse,))
     
     # test rotation
-    valid_rotation_list = ((1, FINESSE_CW), (2, FINESSE_180), (3, FINESSE_CCW)) if can180 else ((1, FINESSE_CW), (3, FINESSE_CCW))
+    valid_rotation_list = ((1, FINESSE_CW), (2, FINESSE_180), (3, FINESSE_CCW)) if can_180 else ((1, FINESSE_CW), (3, FINESSE_CCW))
     for (rotation_move, rotation_finesse) in valid_rotation_list:
       new_rotation = (rotation + rotation_move) % 4
       for (kick_offset_y, kick_offset_x) in KICKS[piece][rotation][rotation_move]:
@@ -458,7 +458,7 @@ def get_next_boards(
       boards[cleared_board_hash] = (is_spin, finesse)
   
   # Cache results
-  simplified_hash = simplify_board_hash(board_hash, piece, no_breaks, can180, boards)
+  simplified_hash = simplify_board_hash(board_hash, piece, no_breaks, can_180, boards)
 
   # Only need to cache if this is the simplified board
   if board_hash == simplified_hash:
@@ -480,14 +480,14 @@ def simplify_board_hash(
     board_hash: BoardHash,
     piece: Piece,
     no_breaks: bool,
-    can180: bool,
+    can_180: bool,
     board_transition: Dict[BoardHash, Tuple[bool, PieceFinesse]]
   ) -> BoardHash:
   """Computes and caches equivalent board hash.
   Finesse and final state will be identical between the two boards aside from adding rows at the bottom."""
 
   # Key for the cache
-  cache_key = (board_hash, piece, no_breaks, can180)
+  cache_key = (board_hash, piece, no_breaks, can_180)
 
   # Check to see if board_hash is already in cache
   if cache_key in SIMPLIFICATION_CACHE:
@@ -502,7 +502,7 @@ def simplify_board_hash(
   for _ in range(height-1, 0, -1):
     hash_factor //= 16
     candidate_simplified_hash = board_hash//hash_factor
-    candidate_cache_key = (candidate_simplified_hash, piece, no_breaks, can180)
+    candidate_cache_key = (candidate_simplified_hash, piece, no_breaks, can_180)
     # Check to see if simplified hash is in tc
     if candidate_cache_key not in TRANSITION_CACHE:
       continue
@@ -630,7 +630,7 @@ def get_next_board_states(
 def get_previous_boards(
     board_hash: BoardHash,
     piece: Piece,
-    can180: bool = True,
+    can_180: bool = True,
   ) -> Dict[BoardHash, tuple[bool, PieceFinesse]]:
   """Computes all possible previous piece boards given board and piece.
 
@@ -640,7 +640,7 @@ def get_previous_boards(
 
   `piece` is the previous piece.
 
-  If `can180` is False, then excludes all 180 finesse.
+  If `can_180` is False, then excludes all 180 finesse.
 
   Assumes 100g.
   """
@@ -687,7 +687,7 @@ def get_previous_boards(
   # Ensure it is possible to reach current board state from each candidate previous board state
   boards = {}
   for candidate_previous_board in candidate_previous_boards:
-    transitions = get_next_boards(candidate_previous_board, piece, can180=can180)
+    transitions = get_next_boards(candidate_previous_board, piece, can_180=can_180)
     if board_hash in transitions:
       boards[candidate_previous_board] = transitions[board_hash]
   
