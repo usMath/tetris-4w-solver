@@ -68,6 +68,8 @@ def get_next_combo_states(
   return next_states
 
 MAX_FORESIGHT_SCORE = int(1e18)
+FORESIGHT_BREAK_SCORE = int(1e9)
+MINO_COUNT_SCORE_MULTIPLIER = 100
 
 def compute_combo_foresight_scores(
     final_states: List[IndexState],
@@ -96,7 +98,7 @@ def compute_combo_foresight_scores(
     for final_state in final_states:
       foresight_continuation_queues[0].add(final_state)
       foresight_first_placements[final_state] = {final_state: 0}
-      foresight_scores[final_state][foresight_queue] = 100000
+      foresight_scores[final_state][foresight_queue] = FORESIGHT_BREAK_SCORE
 
     # BFS to play entire queue without hold
     for piece_num in range(foresight):
@@ -118,8 +120,9 @@ def compute_combo_foresight_scores(
     for final_foresight_state in foresight_continuation_queues[foresight]:
       mino_count = board_lib.num_minos(final_foresight_state[1])
       for final_state in foresight_first_placements[final_foresight_state]:
+        foresight_score = 0
         # mino portion
-        foresight_score = board_lib.score_num_minos(mino_count) * 50
+        foresight_score += board_lib.score_num_minos(mino_count) * MINO_COUNT_SCORE_MULTIPLIER
         # spins portion
         foresight_score -= foresight_first_placements[final_foresight_state][final_state]
         foresight_scores[final_state][foresight_queue] = min(foresight_score, foresight_scores[final_state][foresight_queue])
@@ -137,12 +140,14 @@ def compute_combo_foresight_scores(
     foresight_scores_with_hold[final_state] = {}
 
     for foresight_queue in board_lib.all_queues(foresight):
-      combined_queue = hold + foresight_queue
+      combined_queue = foresight_queue
+      if hold != board_lib.NULL_PIECE:
+        combined_queue = hold + foresight_queue
 
       # Compute best score with hold
       best_score = MAX_FORESIGHT_SCORE
       for queue_order in board_lib.get_queue_orders(combined_queue):
-        best_score = min(best_score, foresight_scores[final_state][queue_order[:-1]])
+        best_score = min(best_score, foresight_scores[final_state][queue_order[:foresight]])
       # Update score
       foresight_scores_with_hold[final_state][foresight_queue] = best_score
 
@@ -301,7 +306,7 @@ def get_best_next_combo_state(
     # For each foresight queue
     for foresight_queue in board_lib.all_queues(foresight):
       # Compute the best score of any reachable final state
-      foresight_score = 100000
+      foresight_score = 1000000
       for final_state in reachables[first_state]:
         adjusted_foresight_score = foresight_scores[final_state][foresight_queue]
         # spins correction
@@ -394,7 +399,7 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
   # initialize game state
   max_hash = 0
   current_hash = starting_state
-  current_minos = 0
+  current_minos = board_lib.num_minos(starting_state)
   hold = next(pieces)
   window = ""
   for _ in range(lookahead):

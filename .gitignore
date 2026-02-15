@@ -2,6 +2,9 @@ __pycache__
 .DS_Store
 temp.py
 data/pc-queues/pc-queues9.txt
+data/pc_finesse_queues/7.txt
+data/pc_finesse_queues/8.txt
 data/tc
 data/old tc
 data/legacy tc
+data/pc_foresight_cache_*
