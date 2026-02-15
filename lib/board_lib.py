@@ -115,6 +115,8 @@ FINESSE_180 = 4
 FINESSE_SD = 5
 FINESSE_HOLD = 6
 
+NULL_FINESSE: PieceFinesse = ()
+
 FINESSE_TRANSFORM = {
     FINESSE_L : "moveLeft",
     FINESSE_R : "moveRight",

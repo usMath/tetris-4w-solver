@@ -1,6 +1,6 @@
-import engine.lib.board_lib as board_lib
-from engine.lib.board_lib import BoardHash, Piece, PieceFinesse, Queue
-from engine.lib.board_lib import EMPTY_BOARD_HASH
+from . import board_lib
+from .board_lib import BoardHash, Piece, PieceFinesse, Queue
+from .board_lib import EMPTY_BOARD_HASH
 
 from collections import defaultdict, deque
 import os
@@ -72,7 +72,7 @@ def generate_all_pc_queues(
     for piece in board_lib.PIECES:
       new_history_queue = piece + history_queue
       if (board_hash, piece) not in backwards_saved_transitions:
-        backwards_saved_transitions[(board_hash, piece)] = board_lib.get_previous_boards(board_hash, piece, forwards_saved_transitions)
+        backwards_saved_transitions[(board_hash, piece)] = board_lib.get_previous_boards(board_hash, piece)
       previous_boards = backwards_saved_transitions[(board_hash, piece)]
       # Track reachable board states
       for previous_board in previous_boards:
@@ -619,7 +619,7 @@ def get_best_next_pc_state(
   
   # Compute combined scores for all initial states
   best_initial_score_sum = max_foresight_score * 7 ** foresight
-  best_initial_state = (EMPTY_BOARD_HASH, NULL_SAVE, None)
+  best_initial_state = (EMPTY_BOARD_HASH, NULL_SAVE, board_lib.NULL_FINESSE)
 
   # For every initial state
   for first_state in reachables:

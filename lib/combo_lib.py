@@ -1,5 +1,5 @@
-import engine.lib.board_lib as board_lib
-from engine.lib.board_lib import BoardHash, IndexState, Piece, PieceFinesse, Queue
+from . import board_lib
+from .board_lib import BoardHash, IndexState, Piece, PieceFinesse, Queue
 from collections import defaultdict
 import random
 import time
