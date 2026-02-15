@@ -1,6 +1,6 @@
-import lib.board_lib as board_lib
-from lib.board_lib import BoardHash, Piece, PieceFinesse, Queue
-from lib.board_lib import EMPTY_BOARD_HASH
+import engine.lib.board_lib as board_lib
+from engine.lib.board_lib import BoardHash, Piece, PieceFinesse, Queue
+from engine.lib.board_lib import EMPTY_BOARD_HASH
 
 from collections import defaultdict, deque
 import os

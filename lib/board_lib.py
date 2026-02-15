@@ -121,14 +121,12 @@ FINESSE_TRANSFORM = {
     FINESSE_CW : "rotateCW",
     FINESSE_CCW : "rotateCCW",
     FINESSE_180 : "rotate180",
-    FINESSE_SD : "softDrop"
+    FINESSE_SD : "softDrop",
+    FINESSE_HOLD : "hold"
   }
-def transform_finesse(piece_finesse: PieceFinesse) -> str:
+def transform_finesse(piece_finesse: Finesse) -> str:
   """Converts a piece finesse to a string for bot output."""
-  transformed_finesse = []
-  for keypress in piece_finesse:
-    transformed_finesse.append(FINESSE_TRANSFORM[keypress])
-  return ",".join(transformed_finesse)
+  return FINESSE_TRANSFORM[piece_finesse]
 
 def hash_board(board: Board) -> BoardHash:
   """Converts a board state to an integer.
@@ -176,7 +174,7 @@ def get_mino_list(board: Board) -> CoordinateList:
         mino_list.append((y, x))
   return mino_list
 
-def lines_to_insert(board_height: int, max_lines: int) -> Generator[Tuple[int, ...]]:
+def lines_to_insert(board_height: int, max_lines: int) -> Generator[Tuple[int, ...], None, None]:
   """Obtains list of ways to insert at most `max_lines` lines into a board."""
   if max_lines == 1:
     yield ()
@@ -191,7 +189,7 @@ def lines_to_insert(board_height: int, max_lines: int) -> Generator[Tuple[int, .
     else:
       yield ()
 
-def generate_7bag() -> Generator[Piece]:
+def generate_7bag() -> Generator[Piece, None, None]:
     """Generates an infinite number of 7bag pieces."""
     pieces = list(PIECES.keys())
     index = len(pieces)
@@ -202,7 +200,7 @@ def generate_7bag() -> Generator[Piece]:
       yield pieces[index]
       index += 1
 
-def all_queues(queue_length: int) -> Generator[Queue]:
+def all_queues(queue_length: int) -> Generator[Queue, None, None]:
   """Generates all queues (ignoring bag structure) of length `queue_length`"""
   if queue_length <= 0:
     yield ""
@@ -211,7 +209,7 @@ def all_queues(queue_length: int) -> Generator[Queue]:
       for queue in all_queues(queue_length-1):
         yield queue + piece
 
-def get_queue_orders(queue: Queue) -> Generator[Queue]:
+def get_queue_orders(queue: Queue) -> Generator[Queue, None, None]:
   """Obtains all possible ways to play a queue given one hold."""
   if len(queue) == 1:
     yield queue[0]
@@ -299,7 +297,7 @@ def score_num_minos(mino_count: int) -> int:
   target = [12, 9, 6, 15][mino_count % 4]
   return abs(mino_count - target)
 
-def get_input_queues_for_output_sequence(target: Queue, hold: Piece) -> Generator[Queue]:
+def get_input_queues_for_output_sequence(target: Queue, hold: Piece) -> Generator[Queue, None, None]:
   """Obtains queues that with the given hold could place the specified pieces."""
   if len(target) == 0:
     yield ""
