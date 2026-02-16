@@ -126,9 +126,10 @@ FINESSE_TRANSFORM = {
     FINESSE_SD : "softDrop",
     FINESSE_HOLD : "hold"
   }
-def transform_finesse(piece_finesse: Finesse) -> str:
+def transform_finesse(piece_finesse: PieceFinesse) -> List[str]:
   """Converts a piece finesse to a string for bot output."""
-  return FINESSE_TRANSFORM[piece_finesse]
+  output_finesse = [FINESSE_TRANSFORM[finesse] for finesse in piece_finesse]
+  return output_finesse
 
 def hash_board(board: Board) -> BoardHash:
   """Converts a board state to an integer.
