@@ -645,7 +645,7 @@ def get_best_next_pc_state(
 
 # inf pc simulator
 # simulation_length is number of pieces to simulate
-def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, pc_n: int = 6, lookahead: int = 6, foresight: int = 1, canHold: bool = True, pc_cache_filename: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
+def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, pc_n: int = 6, lookahead: int = 6, foresight: int = 1, canHold: bool = True, pc_cache_folder: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
   """Infinite pc simulator.
 
   Prints a simulation of the pc decisions taken.
@@ -677,8 +677,8 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, pc_n: int =
     window += next(pieces)
   num_pcs = 0
   
-  if pc_cache_filename is not None:
-    load_pc_foresight_cache(pc_cache_filename, pc_n, foresight)
+  if pc_cache_folder is not None:
+    load_pc_foresight_cache(pc_cache_folder, pc_n, foresight)
 
   pc_data = load_pc_queues(pc_filename)
   build_pc_set(pc_data)
@@ -726,15 +726,15 @@ def simulate_inf_pc(pc_filename: str, simulation_length: int = 1000, pc_n: int =
   print(f"Average pieces per pc: {sum(pc_numbers) / len(pc_numbers)}")
   print(f"Average pps: {time_num / time_sum}")
 
-  if pc_cache_filename is not None:
-    save_pc_foresight_cache(pc_cache_filename, pc_n, foresight)
+  if pc_cache_folder is not None:
+    save_pc_foresight_cache(pc_cache_folder, pc_n, foresight)
   
   return pc_decisions
 
-def save_pc_foresight_cache(base_filename: str, pc_n: int, foresight: int) -> None:
+def save_pc_foresight_cache(folder: str, pc_n: int, foresight: int) -> None:
   """Saves `PC_FORESIGHT_CACHE` to `pickle`."""
   """Also optionally refactors caches."""
-  with open(f"{base_filename}_{pc_n}_{foresight}", 'wb') as output_file:
+  with open(f"{folder}/{pc_n}_{foresight}", 'wb') as output_file:
     pickle.dump(PC_FORESIGHT_CACHE, output_file)
 
 def load_pc_foresight_cache(folder: str, pc_n: int, foresight: int) -> None:
