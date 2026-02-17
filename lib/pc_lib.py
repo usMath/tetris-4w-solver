@@ -161,12 +161,15 @@ def load_pc_queues(filename: str) -> Dict[Tuple[Queue, Tuple[BoardHash]], List[P
     pcs = {}
     # Handle I because it is edge case that is annoying
     input_file.readline()
-    pcs[("I", ())] = [("",),]
+    pcs[("I", ())] = [(),]
     for _ in range(1, N):
       split_line = input_file.readline().strip().split("|")
-      (pc_queue, board_hashes, finesse_list) = split_line
+      (pc_queue, board_hashes, finesse_list_raw) = split_line
       board_hashes = tuple(map(int, board_hashes.split(",")))
-      finesse_list = [tuple(piece_finesse.split(",")) for piece_finesse in finesse_list.split(";")]
+      finesse_list = []
+      for piece_finesse_raw in finesse_list_raw.split(";"):
+        piece_finesse = tuple(map(int, [finesse for finesse in piece_finesse_raw.split(",") if finesse != ""]))
+        finesse_list.append(piece_finesse)
       pcs[(pc_queue, board_hashes)] = finesse_list
   return pcs
 
