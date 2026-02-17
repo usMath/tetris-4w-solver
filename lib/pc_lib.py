@@ -149,7 +149,7 @@ def generate_all_pc_queues(
     output_file.write(str(len(pc_list)) + "\n")
     for (pc_queue, pc_hashes) in pc_list:
       finesse_list = pcs[(pc_queue, pc_hashes)]
-      finesse_string = ";".join(",".join(piece_finesse) for piece_finesse in finesse_list)
+      finesse_string = ";".join(",".join(str(finesse) for finesse in piece_finesse) for piece_finesse in finesse_list)
       output_file.write(f"{pc_queue}|{','.join(str(pc_hash) for pc_hash in pc_hashes)}|{finesse_string}\n")
   return pcs
 

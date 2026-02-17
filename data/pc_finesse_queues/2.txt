@@ -1,8 +1,8 @@
 7
 I||
-JJ|23|;ccw,ccw,sd
-JJ|232|r,f;cw,sd,ccw
-LL|113|f;r,ccw,sd,cw
-LL|142|r;cw,cw,sd
-OO|51|l;r,sd
-OO|204|r;l,sd
+JJ|23|;1,5,4
+JJ|232|1,4;2,5,3
+LL|113|4;1,3,5,2
+LL|142|1;4
+OO|51|0;1,5
+OO|204|1;0,5
