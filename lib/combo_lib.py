@@ -9,12 +9,13 @@ def get_next_combo_states(
   input_states: Set[IndexState],
   origins: Dict[IndexState, Dict[Tuple[BoardHash, Piece, PieceFinesse], int]],
   piece: Piece,
-  no_breaks: bool = True,
+  include_non_breaks: bool = True,
+  include_breaks: bool = False,
   can_180: bool = True,
   initialize_origins: bool = False
 ) -> Set[IndexState]:
   """
-  Returns the set of reachable next states, assuming no breaks.
+  Returns the set of reachable next states.
 
   Also updates initial placements dictionary `origins`, which tracks the starting placements
   from which it is possible to obtain the current state.
@@ -37,16 +38,16 @@ def get_next_combo_states(
       next_state_pieces.append((piece, hold))
     
     for (next_hold, used) in next_state_pieces:
-      transitions = board_lib.get_next_boards(board_hash, used, no_breaks, can_180)
+      transitions = board_lib.get_next_boards(board_hash, used, (not include_breaks), can_180)
       
       for next_board_hash in transitions:
-        # If no_breaks is False, we only want moves with breaks
+        # If include_non_breaks is False, we only want moves with breaks
         broken = board_lib.num_minos(next_board_hash) > current_mino_count
-        if not no_breaks and not broken:
+        if not include_non_breaks and not broken:
           continue
         next_state = (queue_index + 1, next_board_hash, next_hold)
         origins_key = (next_board_hash, next_hold, transitions[next_board_hash][1])
-        spins_added = int(transitions[next_board_hash][0])
+        spins_added = int(transitions[next_board_hash][0] and not broken)
         # Update origins
         if initialize_origins:
           origins[next_state] = {}
@@ -108,6 +109,7 @@ def compute_combo_foresight_scores(
         foresight_first_placements,
         piece,
         True,
+        False,
         can_180,
         False
       )
@@ -178,17 +180,11 @@ def get_best_next_combo_state(
 
   If `can_hold` is False, then assumes that the hold queue is empty and disallows access to it.
 
-  If `build_up_now` is True, then will prioritize upstacking to 12 minos over not breaking.
+  If `build_up_now` is True, then will prioritize upstacking to 6res board state over not breaking.
   """
   # Handle nohold
   if not can_hold:
     queue = board_lib.NULL_PIECE + queue
-
-  # Handle build_up_now
-  num_building_steps = max(0, (15 - board_lib.num_minos(board_hash)) // 4)
-  if not build_up_now:
-    # If we are not upstacking, set num upstacking steps to 0
-    num_building_steps = 0
 
   # (queue_index, board_hash, hold) -> {(starting_board_hash, hold, finesse) -> num_spins}
   first_placements = {}
@@ -203,11 +199,12 @@ def get_best_next_combo_state(
 
   visited_states = set()
 
-  """Step 1: Get ending states"""
-  for num_breaks in range(len(queue)+1):
-
-    # Only do this step if done upstacking
-    if num_breaks >= num_building_steps:
+  """Step 0: Upstack"""
+  if build_up_now:
+    for num_pieces in range(len(queue)-1):
+      
+      # Get next placements
+      new_continuation_queues = defaultdict(set)
       for queue_index in range(1, len(queue)):
         # Obtain next states
         next_states = get_next_combo_states(
@@ -215,17 +212,53 @@ def get_best_next_combo_state(
           first_placements,
           queue[queue_index],
           True,
+          True,
           can_180,
           (queue_index == 1)
         )
         for state in next_states:
-          # Check if already visited (from previous iteration)
-          if state in visited_states:
-            continue
           # Add to queue
-          continuation_queues[queue_index + 1].add(state)
-          # Add to visited
-          visited_states.add(state)
+          new_continuation_queues[queue_index + 1].add(state)
+      continuation_queues = new_continuation_queues
+
+      # Filter out non-6res states
+      state_added = False
+      filtered_continuation_queues = defaultdict(set)
+      for queue_index in range(1, len(queue)):
+        for state in continuation_queues[queue_index]:
+          (_, state_board_hash, _) = state
+          # Check res of state
+          if board_lib.get_res(state_board_hash) == 6:
+            filtered_continuation_queues[queue_index].add(state)
+            state_added = True
+      # Only add if there exists a 6res state
+      if state_added:
+        continuation_queues = filtered_continuation_queues
+        break
+  
+  """Step 1: Get ending states"""
+  for num_breaks in range(len(queue)+1):
+
+    # Get next placements
+    for queue_index in range(1, len(queue)):
+      # Obtain next states
+      next_states = get_next_combo_states(
+        continuation_queues[queue_index],
+        first_placements,
+        queue[queue_index],
+        True,
+        False,
+        can_180,
+        (queue_index == 1)
+      )
+      for state in next_states:
+        # Check if already visited (from previous iteration)
+        if state in visited_states:
+          continue
+        # Add to queue
+        continuation_queues[queue_index + 1].add(state)
+        # Add to visited
+        visited_states.add(state)
     
     # Check if we made it to the end of the queue
     if len(continuation_queues[len(queue)]) > 0:
@@ -240,6 +273,7 @@ def get_best_next_combo_state(
         first_placements,
         queue[queue_index],
         False,
+        True,
         can_180,
         (queue_index == 1)
       )
@@ -370,7 +404,7 @@ def get_best_combo_continuation(board_hash: int, queue: str, lookahead: int = 6,
     
   return combo
 
-def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight: int = 1, well_height: int = 8, can_hold: bool = True, tc_cache_filename: str | None = None, starting_state: int = 0) -> list[tuple[str, int]]:
+def simulate_inf_ds(num_trials = 1, simulation_length: int = 1000, lookahead: int = 6, foresight: int = 1, well_height: int = 8, can_hold: bool = True, tc_cache_filename: str | None = None, starting_state: int = 0):
   """Infinite downstack simulator.
 
   Prints a simulation of the combo decisions taken.
@@ -392,82 +426,84 @@ def simulate_inf_ds(simulation_length: int = 1000, lookahead: int = 6, foresight
 
   `starting_state` is the hash of the intial board state.
   """
-  pieces = board_lib.generate_7bag()
-  combo_decisions = []
-  combo_numbers = []
 
-  # initialize game state
-  max_hash = 0
-  current_hash = starting_state
-  current_minos = board_lib.num_minos(starting_state)
-  hold = next(pieces)
-  window = ""
-  for _ in range(lookahead):
-    window += next(pieces)
-  current_combo = 0
+  if tc_cache_filename is not None:
+    board_lib.load_caches(tc_cache_filename, True)
 
   # precompute garbage wells
   well_multiplier = (16**well_height - 1)//15
   wells = [row_code * well_multiplier for row_code in [7, 11, 13, 14]]
-  
-  if tc_cache_filename is not None:
-    board_lib.load_caches(tc_cache_filename, True)
 
-  time_sum = 0
-  time_num = 0
-  for decision_num in range(simulation_length):
-    # compute next state
-    num_minos = board_lib.num_minos(current_hash)
-    upstack = (num_minos in [0, 1, 2, 4, 5])
-    next_queue = hold + window if can_hold else window
-    time_start = time.time()
+  for _ in range(num_trials):
+    combo_decisions = []
+    combo_numbers = []
 
-    next_state = get_best_next_combo_state(current_hash, next_queue, foresight, build_up_now=upstack, can_hold=can_hold)
-    time_elapsed = time.time() - time_start
-    time_sum += time_elapsed
-    time_num += 1
-    (current_hash, next_hold, finesse) = next_state
-    used = window[0] if next_hold == hold else hold
-    hold = next_hold
-    combo_decisions.append(next_state)
+    # initialize game state
+    pieces = board_lib.generate_7bag()
+    max_hash = 0
+    current_hash = starting_state
+    current_minos = board_lib.num_minos(starting_state)
+    hold = next(pieces)
+    window = ""
+    for _ in range(lookahead):
+      window += next(pieces)
+    current_combo = 0
 
-    # compute next window
-    window = window[1:] + next(pieces)
+    print("Starting simulation!", flush = True)
+    time_sum = 0
+    time_num = 0
+    for decision_num in range(simulation_length):
+      # compute next state
+      num_minos = board_lib.num_minos(current_hash)
+      upstack = (num_minos < 12 and num_minos not in [6, 9])
+      next_queue = hold + window if can_hold else window
+      time_start = time.time()
 
-    # handle combo logic
-    minos = board_lib.num_minos(current_hash)
-    if minos <= current_minos:
-      current_combo += 1
-      current_minos = minos
-    else:
-      combo_numbers.append(current_combo)
-      current_combo = 0
-      current_minos = minos + 3 * well_height
+      next_state = get_best_next_combo_state(current_hash, next_queue, foresight, build_up_now=upstack, can_hold=can_hold)
+      time_elapsed = time.time() - time_start
+      time_sum += time_elapsed
+      time_num += 1
+      (current_hash, next_hold, finesse) = next_state
+      used = window[0] if next_hold == hold else hold
+      hold = next_hold
+      combo_decisions.append(next_state)
 
-      # add garbage!!!
-      current_hash = current_hash * int(16**well_height) + wells[random.randint(0, 3)]
+      # compute next window
+      window = window[1:] + next(pieces)
+
+      # handle combo logic
+      minos = board_lib.num_minos(current_hash)
+      if minos <= current_minos:
+        current_combo += 1
+        current_minos = minos
+      else:
+        combo_numbers.append(current_combo)
+        current_combo = 0
+        current_minos = minos + 3 * well_height
+
+        # add garbage!!!
+        current_hash = current_hash * int(16**well_height) + wells[random.randint(0, 3)]
+      
+      # display board and game state
+      board_lib.display_board(current_hash)
+      print(f"Combo: {current_combo}, pps = {round(1/time_elapsed, 2)}")
+      print(f"Used {used}, next pieces [{hold}]{window}")
+      print(f"Finesse: {finesse}")
+
+      max_hash = max(max_hash, current_hash)
+      if max_hash > 16**26:
+        print(f"DEAD after {decision_num} pieces")
+        break
+    combo_numbers.append(current_combo)
+    print(combo_numbers)
+    height = 0
+    while max_hash > 0:
+      max_hash //= 16
+      height += 1
     
-    # display board and game state
-    board_lib.display_board(current_hash)
-    print(f"Combo: {current_combo}, pps = {round(1/time_elapsed, 2)}")
-    print(f"Used {used}, next pieces [{hold}]{window}")
-    print(f"Finesse: {finesse}")
-
-    max_hash = max(max_hash, current_hash)
-    if max_hash > 16**27:
-      print(f"DEAD after {decision_num} pieces")
-      break
-  combo_numbers.append(current_combo)
-  print(combo_numbers)
-  height = 0
-  while max_hash > 0:
-    max_hash //= 16
-    height += 1
-  print(f"Max height: {height}")
-  print(f"Average combo: {sum([_*_ for _ in combo_numbers]) / sum(combo_numbers)}")
-  print(f"Average pps: {time_num / time_sum}")
+    print(f"Max height: {height}")
+    print(f"Average combo: {sum([_*_ for _ in combo_numbers]) / max(1, sum(combo_numbers))}")
+    print(f"Average pps: {time_num / time_sum}")
 
   if tc_cache_filename is not None:
     board_lib.save_caches(tc_cache_filename)
-
-  return combo_decisions

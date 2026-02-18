@@ -168,6 +168,24 @@ def num_minos(board_hash: BoardHash) -> int:
     board_hash //= 2
   return minos
 
+def get_res(board_hash: BoardHash) -> int:
+  """Computes number of minos in the top few rows, aka the residue of the board."""
+  minos = 0
+  board = unhash_board(board_hash)
+  num_garbage_lines = 0
+  for row in range(len(board)):
+    minos_in_row = sum(board[row])
+    if minos_in_row != 3:
+      break
+    num_garbage_lines += 1
+  for row in range(num_garbage_lines, len(board)):
+    minos_in_row = sum(board[row])
+    minos += minos_in_row
+  while minos < 6 and num_garbage_lines > 0:
+    minos += 3
+    num_garbage_lines -= 1
+  return minos
+
 def get_mino_list(board: Board) -> CoordinateList:
   """Obtains list of minos in the board."""
   mino_list = []
@@ -231,11 +249,12 @@ def is_piece_location_valid(mino_set: CoordinateSet, mino_offsets: CoordinateLis
       return False
   return True
 
-def is_piece_location_spin(mino_set: CoordinateSet, piece: Piece, rotation: int, piece_y: int, piece_x: int):
+def is_piece_location_handheld_spin(mino_set: CoordinateSet, piece: Piece, rotation: int, piece_y: int, piece_x: int):
   """Determines if a piece location and rotation counts as a spin under 3 corner handheld rule.
 
   Assumes initial location is valid.
   Assumes previous action is a rotation.
+  Assumes a line is cleared.
   """
   if piece not in CORNERS:
     return False
@@ -416,7 +435,7 @@ def get_next_boards(
               previous[(newState, False)] = (current, (rotation_finesse, FINESSE_SD))
           else:
             # check for spins
-            is_spin = is_piece_location_spin(mino_set, piece, new_rotation, new_y_position, rotated_x_position)
+            is_spin = is_piece_location_handheld_spin(mino_set, piece, new_rotation, new_y_position, rotated_x_position)
             queue.append((newState, is_spin))
             if (newState, is_spin) not in previous:
               previous[(newState, is_spin)] = (current, (rotation_finesse,))
