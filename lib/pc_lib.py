@@ -627,16 +627,17 @@ def get_best_next_pc_state(
         break
 
     # Compute output
-    (_, piece_used, finesse) = get_best_next_pc_state(
+    (_, next_hold, finesse) = get_best_next_pc_state(
       new_board_hash,
       queue,
       foresight,
       can_hold
     )
+    piece_used = queue[1] if queue[0] == next_hold else queue[0]
 
     # Compute actual board state
     resulting_hash = board_lib.execute_finesse(board_hash, piece_used, finesse)
-    return (resulting_hash, piece_used, finesse)
+    return (resulting_hash, next_hold, finesse)
 
   # Obtain foresight scores
   foresight_scores = compute_foresight_scores(
