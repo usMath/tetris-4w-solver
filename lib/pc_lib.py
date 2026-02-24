@@ -613,6 +613,31 @@ def get_best_next_pc_state(
     for first_state in first_placements[final_state]:
       reachables[first_state].add(final_state)
   
+  # If no path, retry without bottom rows
+  if len(reachables) == 0:
+    board = board_lib.unhash_board(board_hash)
+
+    minos_removed = 0
+    new_board_hash = board_hash
+    # Remove one row at a time until num minos removed is divisible by 4
+    for removed_row_index in range(len(board)):
+      minos_removed += sum(board[removed_row_index])
+      new_board_hash //= 16
+      if minos_removed % 4 == 0:
+        break
+
+    # Compute output
+    (_, piece_used, finesse) = get_best_next_pc_state(
+      new_board_hash,
+      queue,
+      foresight,
+      can_hold
+    )
+
+    # Compute actual board state
+    resulting_hash = board_lib.execute_finesse(board_hash, piece_used, finesse)
+    return (resulting_hash, piece_used, finesse)
+
   # Obtain foresight scores
   foresight_scores = compute_foresight_scores(
     final_states,
@@ -622,7 +647,7 @@ def get_best_next_pc_state(
   
   # Compute combined scores for all initial states
   best_initial_score_sum = max_foresight_score * 7 ** foresight
-  best_initial_state = (EMPTY_BOARD_HASH, NULL_SAVE, board_lib.NULL_FINESSE)
+  best_initial_state = list(reachables.keys())[0]
 
   # For every initial state
   for first_state in reachables:

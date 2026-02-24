@@ -346,7 +346,7 @@ def get_next_boards(
   ) -> Dict[BoardHash, Tuple[bool, PieceFinesse]]:
   """Computes and caches all possible piece placements given board and piece.
 
-  Returns a dictionary of all possible boards, with whether a spin was performed an their finesse.
+  Returns a dictionary of all possible boards, with whether a spin was performed and their finesse.
 
   `board_hash` is the hash of the input board.
 
@@ -485,6 +485,11 @@ def get_next_boards(
     TRANSITION_CACHE[cache_key] = boards
 
   return boards
+
+def execute_finesse(board_hash: BoardHash, piece: Piece, piece_finesse: PieceFinesse) -> BoardHash:
+  """Given board hash, piece, and finesse, output resulting board hash"""
+  # TODO
+  return 0
 
 def create_unsimplify(board_hash: BoardHash, simplified_hash: BoardHash
   ) -> Callable[[BoardHash], BoardHash]:
